@@ -5,7 +5,9 @@ from sqlalchemy import text
 from app.database.database import engine
 
 from app.models.base import Base
-from app.models.user import User
+from app.models.user_model import User
+
+from app.api.user_api import router as user_router
 
 @asynccontextmanager
 async def lifespan(app : FastAPI):
@@ -19,7 +21,7 @@ async def lifespan(app : FastAPI):
 
     yield
 
-    await connection.dispose()
+    await engine.dispose()
 
 app = FastAPI(
     title="DataPulse",
@@ -33,3 +35,5 @@ async def root():
     return {
         "message" : "hehehe"
     }
+
+app.include_router(user_router)
