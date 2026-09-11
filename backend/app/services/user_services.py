@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.auth_schema import RegisterRequest
+from app.schemas.user_schema import RegisterRequest, UserUpdateRequest
 from sqlalchemy import select
 from app.models.user_model import User
 from app.core.security import hash_password
+from fastapi import HTTPException
 
 # CREATE USER 
 async def create_user(
@@ -49,3 +50,79 @@ async def get_all_users(db : AsyncSession):
     users = result.scalars().all()
 
     return users
+
+# GET USER BY ID
+async def get_user_by_id(db : AsyncSession, id : int):
+    result = await db.execute(
+        select(User).
+        where(User.id == id)
+    )
+
+    user = result.scalar_one_or_none()
+
+    return user
+
+# UPDATE USER
+async def update_user(
+        db : AsyncSession,
+        user_id : int,
+        data : UserUpdateRequest
+):
+    result = await db.execute(
+        select(User).where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        return None
+
+    if "name" in data.model_fields_set:
+        user.name = data.name
+
+    if "email" in data.model_fields_set:
+        email_result = await db.execute(
+            select(User).where(
+                User.email == data.email,
+                User.id != user_id
+            )
+        )
+
+        existing = email_result.scalar_one_or_none()
+
+        if existing:
+            raise ValueError("Email already exist")
+
+        user.email = data.email
+
+    await db.commit()
+    await db.refresh(user)
+
+    return user 
+
+# DELETE USER
+async def delete_user(
+        db : AsyncSession,
+        user_id : int
+):
+    result = await db.execute(
+        select(User).where(
+            User.id == user_id
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code = 404,
+            detail = "User does not exist"
+        )
+
+    try :
+        await db.delete(user)
+        await db.commit()
+
+    except Exception:
+        await db.rollback()
+        raise
+
+    return user
