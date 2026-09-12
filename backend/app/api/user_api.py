@@ -4,6 +4,8 @@ from app.schemas.user_schema import RegisterRequest, UserUpdateRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.database import get_db
 from app.services.user_services import create_user, get_all_users, get_user_by_id, update_user, delete_user
+from app.models.user_model import User
+from app.core.dependencies import get_current_user
 
 router = APIRouter(
     prefix = "/users",
@@ -28,6 +30,13 @@ async def register(
         )
 
     return user
+
+# ME 
+@router.get("/me", response_model=UserResponse)
+async def get_my_profile(
+    current_user : User = Depends(get_current_user)
+):
+    return current_user
 
 # GIVES ALL USER
 @router.get(

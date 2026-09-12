@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.auth_schema import LoginRequest
 from app.database.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.security import create_access_token
 
 router = APIRouter(
     prefix="/auth",
@@ -22,8 +23,13 @@ async def login(
             detail="Invalid email or password"
         )
 
+    access_token = create_access_token(
+        {
+            "sub" : str(user.id)
+        }
+    )
+
     return {
-        "msg" : "Login successfull",
-        "user_id" : user.id,
-        "user_email" : user.email
+        "access_token" : access_token,
+        "token_type" : "bearer"
     }
