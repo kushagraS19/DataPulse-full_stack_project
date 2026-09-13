@@ -23,7 +23,6 @@ async def lifespan(app : FastAPI):
     yield
 
     await engine.dispose()
-
 app = FastAPI(
     title="DataPulse",
     description="Data Analysis Platform",

@@ -126,3 +126,32 @@ async def delete_user(
         raise
 
     return user
+
+# DELETE USER BY ADMIN
+async def admin_delete_user(
+        user_id : int,
+        db : AsyncSession
+):
+    result = await db.execute(
+        select(User).where(
+            User.id == user_id
+        )
+    )
+
+    user = result.scalars_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    try :
+        await db.delete(user)
+        await db.commit()
+
+    except Exception:
+        await db.rollback()
+        raise
+
+    return user

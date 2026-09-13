@@ -24,3 +24,10 @@ class User (Base):
         DateTime,
         default= datetime.utcnow
     )
+
+    role: Mapped[str] = mapped_column(
+    String(20),
+    default="user",
+    server_default="user",
+    nullable=False
+)
