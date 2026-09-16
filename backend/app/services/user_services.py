@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.user_schema import RegisterRequest, UserUpdateRequest
 from sqlalchemy import select
 from app.models.user_model import User
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from fastapi import HTTPException
 
 # CREATE USER 
@@ -153,5 +153,36 @@ async def admin_delete_user(
     except Exception:
         await db.rollback()
         raise
+
+    return user
+
+# CHANGE USER PASSWORD
+async def change_password(
+        db : AsyncSession,
+        user : User,
+        current_password : str,
+        new_password : str
+):
+    if not verify_password(current_password,user.password_hash):
+        raise ValueError("Password is incorrect")
+
+    user.password_hash = hash_password(new_password)
+
+    try : 
+        await db.commit()
+        await db.refresh(user)
+    except Exception:
+        await db.rollback()
+        raise
+
+async def change_user_password(
+    db: AsyncSession,
+    user: User,
+    new_password: str
+):
+    user.password_hash = hash_password(new_password)
+
+    await db.commit()
+    await db.refresh(user)
 
     return user

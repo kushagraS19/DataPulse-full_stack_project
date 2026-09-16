@@ -2,6 +2,8 @@ from pwdlib import PasswordHash
 from datetime import datetime, timezone, timedelta
 import jwt
 from app.core.config import settings
+import hashlib
+import hmac
 
 password_hash = PasswordHash.recommended()
 
@@ -46,3 +48,24 @@ def decode_access_token(token : str):
     except jwt.InvalidTokenError:
         return None
 
+def create_otp_digest(otp: str, user_id: int) -> str:
+    message = f"password-change:{user_id}:{otp}".encode()
+
+    return hmac.new(
+        settings.OTP_SECRET.encode(),
+        message,
+        hashlib.sha256
+    ).hexdigest()
+
+
+def verify_otp(
+    otp: str,
+    user_id: int,
+    stored_digest: str
+) -> bool:
+    expected_digest = create_otp_digest(otp, user_id)
+
+    return hmac.compare_digest(
+        expected_digest,
+        stored_digest
+    )
