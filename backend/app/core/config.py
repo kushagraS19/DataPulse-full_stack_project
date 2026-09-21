@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     ALGORITHM : str
     ACCESS_TOKEN_EXPIRE_MINUTES : int
     OTP_SECRET : str
+
+    RESEND_API_KEY : str
+    EMAIL_FROM : str
     
 
     model_config = SettingsConfigDict(

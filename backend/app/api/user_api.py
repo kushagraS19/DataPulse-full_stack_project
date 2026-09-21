@@ -7,6 +7,7 @@ from app.services.user_services import create_user, get_all_users, get_user_by_i
 from app.models.user_model import User
 from app.core.dependencies import get_current_user, get_admin
 from app.services.password_otp_services import create_password_change_otp, verify_password_change_otp
+from app.services.email_services import send_password_change_otp
 
 router = APIRouter(
     prefix = "/users",
@@ -154,9 +155,13 @@ async def request_password_change_otp(
         current_user
     )
 
+    await send_password_change_otp(
+        current_user.email,
+        otp
+    )
+
     return {
-        "message": "OTP generated successfully",
-        "otp": otp
+        "message": "OTP sent successfully"
     }
 
 @router.post("/password-change/verify")
