@@ -150,15 +150,22 @@ async def request_password_change_otp(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    otp = await create_password_change_otp(
-        db,
-        current_user
-    )
+    try:
+        otp = await create_password_change_otp(
+            db,
+            current_user
+        )
 
-    await send_password_change_otp(
-        current_user.email,
-        otp
-    )
+        await send_password_change_otp(
+            current_user.email,
+            otp
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=429,
+            detail=str(e)
+        )
 
     return {
         "message": "OTP sent successfully"
