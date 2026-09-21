@@ -25,7 +25,8 @@ async def login(
 
     access_token = create_access_token(
         {
-            "sub" : str(user.id)
+            "sub" : str(user.id),
+            "token_version" : user.token_version
         }
     )
 

@@ -26,8 +26,14 @@ class User (Base):
     )
 
     role: Mapped[str] = mapped_column(
-    String(20),
-    default="admin",
-    server_default="admin",
-    nullable=False
-)
+        String(20),
+        default="admin",
+        server_default="admin",
+        nullable=False
+    )
+
+    token_version: Mapped[int] = mapped_column(
+        default=0,
+        server_default="0",
+        nullable=False
+    )

@@ -9,8 +9,8 @@ from app.models.user_model import User
 security = HTTPBearer()
 
 async def get_current_user(
-        credentials : HTTPAuthorizationCredentials = Depends(security),
-        db : AsyncSession = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
 ):
     token = credentials.credentials
 
@@ -30,7 +30,7 @@ async def get_current_user(
             detail="Invalid token"
         )
 
-    try : 
+    try:
         user_id = int(user_id)
 
     except (ValueError, TypeError):
@@ -44,7 +44,22 @@ async def get_current_user(
     if user is None:
         raise HTTPException(
             status_code=401,
-            detail="user not found"
+            detail="User not found"
+        )
+
+    # Check token version
+    token_version = payload.get("token_version")
+
+    if token_version is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    if token_version != user.token_version:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been revoked"
         )
 
     return user
