@@ -78,9 +78,10 @@ async def create_password_reset_otp(
 
     # Create secure digest
     otp_digest = create_otp_digest(
-        otp,
-        user.id
-    )
+    otp,
+    user.id,
+    "password-reset"
+)
 
     expires_at = (
         now +
@@ -158,7 +159,8 @@ async def verify_password_reset_otp(
     if not verify_otp(
         otp,
         user.id,
-        otp_record.otp_hash
+        otp_record.otp_hash,
+        "password-reset"
     ):
 
         otp_record.attempts += 1

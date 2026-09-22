@@ -78,7 +78,8 @@ async def create_password_change_otp(
 
     otp_digest = create_otp_digest(
         otp,
-        user.id
+        user.id,
+        "password-change"
     )
 
     expires_at = (
@@ -143,7 +144,8 @@ async def verify_password_change_otp(
     if not verify_otp(
         otp,
         user.id,
-        otp_record.otp_hash
+        otp_record.otp_hash,
+        "password-change"
     ):
         otp_record.attempts += 1
 

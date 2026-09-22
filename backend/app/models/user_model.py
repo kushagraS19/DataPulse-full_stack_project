@@ -37,3 +37,8 @@ class User (Base):
         server_default="0",
         nullable=False
     )
+    email_verified: Mapped[bool] = mapped_column(
+        default=False,
+        server_default="false",
+        nullable=False
+    )

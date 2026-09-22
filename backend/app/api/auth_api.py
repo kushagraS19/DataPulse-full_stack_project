@@ -1,9 +1,10 @@
 from app.services.auth_services import authenticate_user
 from sqlalchemy import select
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest
+from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest
 from app.database.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.dependencies import get_current_user
 from app.core.security import create_access_token
 from app.models.user_model import User
 from app.services.password_reset_otp_services import (
@@ -15,6 +16,14 @@ from app.services.email_services import (
 )
 from app.services.user_services import (
     change_user_password,
+)
+from app.services.email_verification_otp_services import (
+    create_email_verification_otp,
+    verify_email_verification_otp
+)
+
+from app.services.email_services import (
+    send_email_verification_otp
 )
 
 router = APIRouter(
@@ -133,4 +142,53 @@ async def verify_password_reset(
 
     return {
         "message": "Password reset successfully"
+    }
+
+@router.post("/email-verification/request")
+async def request_email_verification(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        otp = await create_email_verification_otp(
+            db,
+            current_user
+        )
+
+        await send_email_verification_otp(
+            current_user.email,
+            otp
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=429,
+            detail=str(e)
+        )
+
+    return {
+        "message": "Verification OTP sent successfully"
+    }
+
+@router.post("/email-verification/verify")
+async def verify_email_verification(
+    data: EmailVerificationVerifyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        await verify_email_verification_otp(
+            db,
+            current_user,
+            data.otp
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    return {
+        "message": "Email verified successfully"
     }
