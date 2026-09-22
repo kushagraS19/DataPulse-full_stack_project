@@ -16,3 +16,18 @@ class UserResponse(BaseModel):
 class PasswordChangeVerifyRequest(BaseModel):
     otp: str = Field(min_length=6, max_length=6)
     new_password: str = Field(min_length=8, max_length=128)
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(
+        min_length=6,
+        max_length=6
+    )
+    new_password: str = Field(
+        min_length=8,
+        max_length=128
+    )
