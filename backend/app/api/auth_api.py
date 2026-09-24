@@ -36,7 +36,13 @@ async def login(
     data : LoginRequest,
     db : AsyncSession = Depends(get_db)
 ):
-    user = await authenticate_user(db, data.email, data.password)
+    try :
+        user = await authenticate_user(db, data.email, data.password)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=str(e)
+        )
 
     if user is None:
         raise HTTPException(

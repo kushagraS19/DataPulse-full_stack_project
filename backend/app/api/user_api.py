@@ -8,6 +8,8 @@ from app.models.user_model import User
 from app.core.dependencies import get_current_user, get_admin
 from app.services.password_otp_services import create_password_change_otp, verify_password_change_otp
 from app.services.email_services import send_password_change_otp
+from app.services.email_verification_otp_services import create_email_verification_otp
+from app.services.email_services import send_email_verification_otp
 
 router = APIRouter(
     prefix = "/users",
@@ -29,6 +31,23 @@ async def register(
         raise HTTPException(
             status_code=400,
             detail = "Email Already Exist"
+        )
+
+    try:
+        otp = await create_email_verification_otp(
+            db,
+            user
+        )
+
+        await send_email_verification_otp(
+            user.email,
+            otp
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=429,
+            detail=str(e)
         )
 
     return user

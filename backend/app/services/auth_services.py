@@ -5,27 +5,28 @@ from app.core.security import verify_password
 from app.models.user_model import User
 
 async def authenticate_user(
-        db : AsyncSession,
-        email : str,
-        password : str
+    db: AsyncSession,
+    email: str,
+    password: str
 ):
     result = await db.execute(
-        select(User).where(
-            User.email == email
-        )
+        select(User).where(User.email == email)
     )
 
     user = result.scalar_one_or_none()
 
-    if not user:
+    if user is None:
         return None
 
-    valid_password = verify_password(
+    if not verify_password(
         password,
         user.password_hash
-    )
-
-    if not valid_password:
+    ):
         return None
+
+    if not user.email_verified:
+        raise ValueError(
+            "Please verify your email before logging in"
+        )
 
     return user
