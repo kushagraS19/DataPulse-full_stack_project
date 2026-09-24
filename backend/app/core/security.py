@@ -4,6 +4,7 @@ import jwt
 from app.core.config import settings
 import hashlib
 import hmac
+import secrets
 
 password_hash = PasswordHash.recommended()
 
@@ -77,3 +78,11 @@ def verify_otp(
         expected_digest,
         stored_digest
     )
+
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(64)
+
+def hash_refresh_token(token : str) -> str:
+    return hashlib.sha256(
+        token.encode()
+    ).hexdigest()

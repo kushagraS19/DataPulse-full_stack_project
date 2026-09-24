@@ -1,7 +1,7 @@
 from app.services.auth_services import authenticate_user
 from sqlalchemy import select
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest
+from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest,RefreshTokenRequest
 from app.database.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user
@@ -25,6 +25,19 @@ from app.services.email_verification_otp_services import (
 from app.services.email_services import (
     send_email_verification_otp
 )
+
+from app.services.refresh_token_service import create_user_refresh_token
+
+from app.services.refresh_token_service import (
+    create_user_refresh_token,
+    validate_refresh_token,
+    revoke_refresh_token
+)
+
+
+
+
+
 
 router = APIRouter(
     prefix="/auth",
@@ -57,8 +70,14 @@ async def login(
         }
     )
 
+    refresh_token = await create_user_refresh_token(
+        db,
+        user
+    )
+
     return {
         "access_token" : access_token,
+        "refresh_token" : refresh_token,
         "token_type" : "bearer"
     }
 
@@ -197,4 +216,52 @@ async def verify_email_verification(
 
     return {
         "message": "Email verified successfully"
+    }
+
+@router.post("/refresh")
+async def refresh_access_token(
+    data: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        refresh_token, user = await validate_refresh_token(
+            db,
+            data.refresh_token
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=str(e)
+        )
+
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "token_version": user.token_version
+    })
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+
+@router.post("/logout")
+async def logout(
+    data: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        await revoke_refresh_token(
+            db,
+            data.refresh_token
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=str(e)
+        )
+
+    return {
+        "message": "Logged out successfully"
     }
