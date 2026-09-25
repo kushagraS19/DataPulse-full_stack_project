@@ -1,6 +1,6 @@
 from app.services.auth_services import authenticate_user
 from sqlalchemy import select
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest,RefreshTokenRequest, EmailVerificationRequest
 from app.database.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,9 @@ from app.services.password_reset_otp_services import (
     create_password_reset_otp,
     verify_password_reset_otp,
 )
+
+from datetime import datetime, timedelta, timezone
+
 from app.services.email_services import (
     send_password_change_otp,
 )
@@ -35,8 +38,14 @@ from app.services.refresh_token_service import (
     rotate_refresh_token
 )
 
+from app.services.login_attempt_services import (
+    is_login_locked,
+    record_failed_login,
+    reset_login_attempts
+)
 
 
+LOCKOUT_MINUTES = 15
 
 
 
@@ -48,8 +57,27 @@ router = APIRouter(
 @router.post("/login")
 async def login(
     data : LoginRequest,
+    request : Request,
     db : AsyncSession = Depends(get_db)
 ):
+
+    time = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)
+    remaining_minutes = int((time - datetime.now(timezone.utc)).total_seconds() / 60)
+
+    ip_address = request.client.host
+
+    locked = await is_login_locked(
+        db,
+        data.email,
+        ip_address
+    )
+
+    if locked:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed login attempts. Please try again after {remaining_minutes} minutes."
+        )
+    
     try :
         user = await authenticate_user(db, data.email, data.password)
     except ValueError as e:
@@ -59,10 +87,23 @@ async def login(
         )
 
     if user is None:
+
+        await record_failed_login(
+            db,
+            data.email,
+            ip_address
+        )
+
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password"
         )
+
+    await reset_login_attempts(
+        db,
+        data.email,
+        ip_address
+    )
 
     access_token = create_access_token(
         {
