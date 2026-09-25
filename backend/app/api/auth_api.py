@@ -31,7 +31,8 @@ from app.services.refresh_token_service import create_user_refresh_token
 from app.services.refresh_token_service import (
     create_user_refresh_token,
     validate_refresh_token,
-    revoke_refresh_token
+    revoke_refresh_token,
+    rotate_refresh_token
 )
 
 
@@ -265,7 +266,7 @@ async def refresh_access_token(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        refresh_token, user = await validate_refresh_token(
+        refresh_token, user = await rotate_refresh_token(
             db,
             data.refresh_token
         )
@@ -283,6 +284,7 @@ async def refresh_access_token(
 
     return {
         "access_token": access_token,
+        "refresh_token" : refresh_token,
         "token_type": "bearer"
     }
 

@@ -62,8 +62,8 @@ async def get_refresh_token(
 
 
 async def validate_refresh_token(
-        db : AsyncSession,
-        token : str
+    db: AsyncSession,
+    token: str
 ):
     refresh_token = await get_refresh_token(
         db,
@@ -71,35 +71,36 @@ async def validate_refresh_token(
     )
 
     if refresh_token is None:
-        raise ValueError(
-            "Invalid Refresh Token"
-        )
+        raise ValueError("Invalid refresh token")
 
     if refresh_token.revoked:
         raise ValueError(
-            "Refresh Token is revoked"
+            "Refresh token has been revoked"
         )
 
-    if refresh_token.expires_at <= datetime.now(
-        timezone.utc
-    ):
+    if refresh_token.expires_at <= datetime.now(timezone.utc):
         raise ValueError(
-            "Refresh Token is expired"
+            "Refresh token has expired"
         )
 
     result = await db.execute(
-        select(User)
-        .where(
-            User.id == RefreshToken.user_id
-        )
+    select(User).where(
+        User.id == refresh_token.user_id
     )
+)
 
-    user = result.scalar_one_or_none()
+    users = result.scalars().all()
+
+    if not users:
+        raise ValueError("User not found")
+
+    if len(users) > 1:
+        raise ValueError("Multiple users found for this ID")
+
+    user = users[0]
 
     if user is None:
-        raise ValueError(
-            "User Not Found"
-        )
+        raise ValueError("User not found")
 
     return refresh_token, user  
 
@@ -148,3 +149,39 @@ async def revoke_refresh_token(
     user.token_version += 1
 
     await db.commit()
+
+async def rotate_refresh_token(
+    db: AsyncSession,
+    token: str
+):
+    refresh_token, user = await validate_refresh_token(
+        db,
+        token
+    )
+
+    # Revoke old refresh token
+    refresh_token.revoked = True
+
+    # Create new refresh token
+    new_token = create_refresh_token()
+
+    new_token_hash = hash_refresh_token(
+        new_token
+    )
+
+    new_refresh_token = RefreshToken(
+        user_id=user.id,
+        token_hash=new_token_hash,
+        expires_at=(
+            datetime.now(timezone.utc)
+            + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        ),
+        revoked=False
+    )
+
+    db.add(new_refresh_token)
+
+    await db.commit()
+    await db.refresh(new_refresh_token)
+
+    return new_token, user
