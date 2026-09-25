@@ -32,7 +32,11 @@ class PasswordResetVerifyRequest(BaseModel):
         max_length=128
     )
 
+class EmailVerificationRequest(BaseModel):
+    email : EmailStr
+
 class EmailVerificationVerifyRequest(BaseModel):
+    email : EmailStr    
     otp: str = Field(
         min_length=6,
         max_length=6

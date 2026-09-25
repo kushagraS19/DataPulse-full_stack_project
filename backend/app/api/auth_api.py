@@ -1,7 +1,7 @@
 from app.services.auth_services import authenticate_user
 from sqlalchemy import select
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest,RefreshTokenRequest
+from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest,RefreshTokenRequest, EmailVerificationRequest
 from app.database.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user
@@ -171,17 +171,37 @@ async def verify_password_reset(
 
 @router.post("/email-verification/request")
 async def request_email_verification(
-    current_user: User = Depends(get_current_user),
+    data : EmailVerificationRequest,
     db: AsyncSession = Depends(get_db)
 ):
+
+    result = await db.execute(
+        select(User)
+        .where(
+            User.email == data.email
+        )
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        return {
+            "message" : "If an account exists for this email, a verification email has been sent."
+        }
+
+    if user.email_verified:
+        return {
+            "Email is already verified."
+        }
+
     try:
         otp = await create_email_verification_otp(
             db,
-            current_user
+            user
         )
 
         await send_email_verification_otp(
-            current_user.email,
+            user.email,
             otp
         )
 
@@ -198,13 +218,34 @@ async def request_email_verification(
 @router.post("/email-verification/verify")
 async def verify_email_verification(
     data: EmailVerificationVerifyRequest,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+
+    result = await db.execute(
+        select(User)
+        .where(
+            User.email == data.email
+        )
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid email or OTP"
+        )
+
+    if user.email_verified:
+        return {
+            "message": "Email is already verified"
+        }
+        
+    
     try:
         await verify_email_verification_otp(
             db,
-            current_user,
+            user,
             data.otp
         )
 

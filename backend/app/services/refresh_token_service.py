@@ -105,8 +105,8 @@ async def validate_refresh_token(
 
 
 async def revoke_refresh_token(
-        db : AsyncSession,
-        token : str
+    db: AsyncSession,
+    token: str
 ):
     refresh_token = await get_refresh_token(
         db,
@@ -118,6 +118,33 @@ async def revoke_refresh_token(
             "Invalid refresh token"
         )
 
+    if refresh_token.revoked:
+        raise ValueError(
+            "Refresh token has already been revoked"
+        )
+
+    if refresh_token.expires_at <= datetime.now(timezone.utc):
+        raise ValueError(
+            "Refresh token has expired"
+        )
+
+    result = await db.execute(
+        select(User).where(
+            User.id == refresh_token.user_id
+        )
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise ValueError(
+            "User not found"
+        )
+
+    # Revoke refresh token
     refresh_token.revoked = True
+
+    # Revoke all existing access JWTs
+    user.token_version += 1
 
     await db.commit()
