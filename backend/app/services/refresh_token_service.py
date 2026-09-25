@@ -11,6 +11,8 @@ from app.core.security import (
 from app.models.refresh_token_model import RefreshToken
 from app.models.user_model import User
 
+import secrets
+
 
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
@@ -24,9 +26,13 @@ async def create_user_refresh_token(
         token
     )
 
+    token_family = secrets.token_hex(32)
+
     refresh_token = RefreshToken(
         user_id = user.id,
         token_hash=token_hash,
+        token_family=token_family,
+        token_version=user.token_version,
         expires_at = (
             datetime.now(timezone.utc)
             + timedelta(
@@ -60,6 +66,24 @@ async def get_refresh_token(
 
     return result.scalar_one_or_none()
 
+async def revoke_token_family(
+        db : AsyncSession,
+        token_family : str
+):
+    result = await db.execute(
+        select(RefreshToken)
+        .where(
+            RefreshToken.token_family == token_family,
+            RefreshToken.revoked == False
+        )
+    )
+
+    tokens = result.scalars().all()
+
+    for refresh_token in tokens:
+        refresh_token.revoked = True
+
+    await db.commit()
 
 async def validate_refresh_token(
     db: AsyncSession,
@@ -74,8 +98,14 @@ async def validate_refresh_token(
         raise ValueError("Invalid refresh token")
 
     if refresh_token.revoked:
+        await revoke_token_family(
+            db,
+            refresh_token.token_family
+        )
+
         raise ValueError(
-            "Refresh token has been revoked"
+            "Refresh token reuse is detected."
+            "Session has been revoked."
         )
 
     if refresh_token.expires_at <= datetime.now(timezone.utc):
@@ -89,18 +119,15 @@ async def validate_refresh_token(
     )
 )
 
-    users = result.scalars().all()
-
-    if not users:
-        raise ValueError("User not found")
-
-    if len(users) > 1:
-        raise ValueError("Multiple users found for this ID")
-
-    user = users[0]
+    user = result.scalar_one_or_none()
 
     if user is None:
         raise ValueError("User not found")
+
+    if refresh_token.token_version != user.token_version:
+        raise ValueError(
+            "Refresh token has been invalidated"
+        )
 
     return refresh_token, user  
 
@@ -129,26 +156,10 @@ async def revoke_refresh_token(
             "Refresh token has expired"
         )
 
-    result = await db.execute(
-        select(User).where(
-            User.id == refresh_token.user_id
-        )
+    await revoke_token_family(
+        db,
+        refresh_token.token_family
     )
-
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise ValueError(
-            "User not found"
-        )
-
-    # Revoke refresh token
-    refresh_token.revoked = True
-
-    # Revoke all existing access JWTs
-    user.token_version += 1
-
-    await db.commit()
 
 async def rotate_refresh_token(
     db: AsyncSession,
@@ -158,6 +169,8 @@ async def rotate_refresh_token(
         db,
         token
     )
+
+    token_family = refresh_token.token_family
 
     # Revoke old refresh token
     refresh_token.revoked = True
@@ -172,6 +185,8 @@ async def rotate_refresh_token(
     new_refresh_token = RefreshToken(
         user_id=user.id,
         token_hash=new_token_hash,
+        token_family=token_family,
+        token_version=user.token_version,
         expires_at=(
             datetime.now(timezone.utc)
             + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
@@ -185,3 +200,4 @@ async def rotate_refresh_token(
     await db.refresh(new_refresh_token)
 
     return new_token, user
+

@@ -26,6 +26,18 @@ class RefreshToken(Base):
         index=True
     )
 
+    token_family : Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True
+    )
+
+    token_version: Mapped[int] = mapped_column(
+    default=0,
+    server_default="0",
+    nullable=False
+)
+
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False
