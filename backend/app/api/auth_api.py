@@ -1,6 +1,6 @@
 from app.services.auth_services import authenticate_user
 from sqlalchemy import select
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Response
 from app.schemas.auth_schema import LoginRequest, PasswordResetRequest, PasswordResetVerifyRequest, EmailVerificationVerifyRequest,RefreshTokenRequest, EmailVerificationRequest
 from app.database.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,7 @@ router = APIRouter(
 async def login(
     data : LoginRequest,
     request : Request,
+    response : Response,
     db : AsyncSession = Depends(get_db)
 ):
 
@@ -113,14 +114,22 @@ async def login(
     )
 
     refresh_token = await create_user_refresh_token(
-        db,
-        user
+    db,
+    user
+    )
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60
     )
 
     return {
-        "access_token" : access_token,
-        "refresh_token" : refresh_token,
-        "token_type" : "bearer"
+        "access_token": access_token,
+        "token_type": "bearer"
     }
 
 @router.post("/password-reset/request")
@@ -303,13 +312,21 @@ async def verify_email_verification(
 
 @router.post("/refresh")
 async def refresh_access_token(
-    data: RefreshTokenRequest,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
+    refresh_token = request.cookies.get("refresh_token")
+
+    if refresh_token is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token not found"
+        )
     try:
         refresh_token, user = await rotate_refresh_token(
             db,
-            data.refresh_token
+            refresh_token
         )
 
     except ValueError as e:
@@ -323,21 +340,38 @@ async def refresh_access_token(
         "token_version": user.token_version
     })
 
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60
+    )
+
     return {
         "access_token": access_token,
-        "refresh_token" : refresh_token,
         "token_type": "bearer"
     }
 
 @router.post("/logout")
 async def logout(
-    data: RefreshTokenRequest,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
+    refresh_token = request.cookies.get("refresh_token")
+
+    if refresh_token is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token not found"
+        )
+
     try:
         await revoke_refresh_token(
             db,
-            data.refresh_token
+            refresh_token
         )
 
     except ValueError as e:
@@ -346,6 +380,14 @@ async def logout(
             detail=str(e)
         )
 
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=False,
+        samesite="lax"
+    )
+
     return {
         "message": "Logged out successfully"
     }
+
