@@ -37,3 +37,17 @@ async def get_user_workspaces(
 
     return result.scalars().all()
 
+async def get_workspace_by_id(
+        db : AsyncSession,
+        workspace_id : int,
+        owner_id : int
+):
+    result = await db.execute(
+        select(Workspace)
+        .where(
+            Workspace.id == workspace_id,
+            Workspace.owner_id == owner_id
+        )
+    )
+
+    return result.scalar_one_or_none()

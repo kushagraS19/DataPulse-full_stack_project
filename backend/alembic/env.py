@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.models.base import Base
 from app.models.user_model import User
 from app.models.workspace_model import Workspace
+from app.models.project_model import Project
 
 
 config = context.config
