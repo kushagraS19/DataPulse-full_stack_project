@@ -20,3 +20,9 @@ class DatasetResponse(BaseModel):
     model_config = ConfigDict(
         from_attributes=True
     )
+
+class DatasetPreviewResponse(BaseModel):
+    dataset_id: int
+    columns: list[str]
+    row_count: int
+    preview: list[dict]
