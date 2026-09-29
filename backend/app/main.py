@@ -12,6 +12,7 @@ from app.api.user_api import router as user_router
 from app.api.auth_api import router as auth_router
 from app.api.workspace_api import router as workspace_router
 from app.api.project_api import router as project_router
+from app.api.dataset_api import router as dataset_router
 
 from app.core.security_headers import SecurityHeadersMiddleware
 
@@ -59,3 +60,4 @@ app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(workspace_router)
 app.include_router(project_router)
+app.include_router(dataset_router)

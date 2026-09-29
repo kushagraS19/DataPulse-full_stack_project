@@ -11,6 +11,7 @@ from app.models.base import Base
 from app.models.user_model import User
 from app.models.workspace_model import Workspace
 from app.models.project_model import Project
+from app.models.dataset_model import Dataset
 
 
 config = context.config

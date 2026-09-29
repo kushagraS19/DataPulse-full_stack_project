@@ -37,3 +37,17 @@ async def get_workspace_projects(
     return result.scalars().all()
 
 
+
+async def get_project_by_id(
+    db: AsyncSession,
+    project_id: int,
+    workspace_id: int
+):
+    result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.workspace_id == workspace_id
+        )
+    )
+
+    return result.scalar_one_or_none()
