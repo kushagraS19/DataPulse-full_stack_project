@@ -14,6 +14,8 @@ from app.api.workspace_api import router as workspace_router
 from app.api.project_api import router as project_router
 from app.api.dataset_api import router as dataset_router
 from app.api.analytics_api import router as analytics_router
+from app.api.dashboard_api import router as dashboard_router
+from app.api.chart_api import router as chart_router
 
 from app.core.security_headers import SecurityHeadersMiddleware
 
@@ -63,3 +65,5 @@ app.include_router(workspace_router)
 app.include_router(project_router)
 app.include_router(dataset_router)
 app.include_router(analytics_router)
+app.include_router(dashboard_router)
+app.include_router(chart_router)
