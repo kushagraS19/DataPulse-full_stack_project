@@ -78,3 +78,19 @@ async def preview_dataset(
         "row_count": len(df),
         "preview": preview
     }
+
+
+
+async def get_dataset_by_id(
+    db: AsyncSession,
+    dataset_id: int,
+    project_id: int
+):
+    result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id,
+            Dataset.project_id == project_id
+        )
+    )
+
+    return result.scalar_one_or_none()
