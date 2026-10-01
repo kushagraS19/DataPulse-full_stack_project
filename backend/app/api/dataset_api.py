@@ -22,7 +22,11 @@ from app.schemas.dataset_schema import (
 from app.services.dataset_services import (
     create_dataset,
     get_project_datasets,
-    preview_dataset
+    preview_dataset,
+    get_dataset_data,
+    create_dataset_table,
+    get_dataset_columns,
+    get_dataset_column_operations
 )
 
 from app.services.project_services import get_project_by_id
@@ -166,7 +170,6 @@ async def upload_dataset(
             detail="Only CSV files are allowed"
         )
 
-    # Create raw and processed directories
     os.makedirs(
         "uploads/raw",
         exist_ok=True
@@ -177,7 +180,6 @@ async def upload_dataset(
         exist_ok=True
     )
 
-    # Generate unique filename
     unique_id = str(uuid.uuid4())
 
     raw_file_path = os.path.join(
@@ -192,7 +194,6 @@ async def upload_dataset(
         f"{unique_id}_cleaned.csv"
     )
 
-    # Save raw uploaded file
     file_size = 0
 
     with open(
@@ -219,7 +220,6 @@ async def upload_dataset(
 
             buffer.write(chunk)
 
-    # Process raw CSV
     try:
 
         df = process_csv(
@@ -237,7 +237,6 @@ async def upload_dataset(
             detail=str(e)
         )
 
-    # Save processed CSV
     try:
 
         df.to_csv(
@@ -256,7 +255,6 @@ async def upload_dataset(
             detail=f"Failed to save processed CSV: {str(e)}"
         )
 
-    # Create database record
     dataset = await create_dataset(
         db,
         project_id,
@@ -264,8 +262,24 @@ async def upload_dataset(
         processed_file_path
     )
 
-    return dataset
+    try:
 
+        await create_dataset_table(
+            db,
+            dataset.id,
+            df
+        )
+
+    except Exception as e:
+
+        await db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create analytical table: {str(e)}"
+        )
+
+    return dataset
 
 
 @router.get(
@@ -365,3 +379,158 @@ async def get_dataset_preview(
         )
 
     return preview
+
+
+@router.get(
+    "/{dataset_id}/data"
+)
+async def get_dataset_data_endpoint(
+    dataset_id: int,
+    project_id: int,
+    workspace_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    project = await get_project_by_id(
+        db,
+        project_id,
+        workspace_id
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    try:
+        result = await get_dataset_data(
+            db,
+            dataset_id
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
+
+    return result
+
+
+@router.get("/{dataset_id}/columns")
+async def get_dataset_columns_endpoint(
+    dataset_id: int,
+    project_id: int,
+    workspace_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    project = await get_project_by_id(
+        db,
+        project_id,
+        workspace_id
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    columns = await get_dataset_columns(
+        db,
+        dataset_id
+    )
+
+    if columns is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
+
+    return {
+        "dataset_id": dataset_id,
+        "columns": columns
+    }
+
+
+@router.get("/{dataset_id}/column-operations")
+async def get_dataset_column_operations_endpoint(
+    dataset_id: int,
+    project_id: int,
+    workspace_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    project = await get_project_by_id(
+        db,
+        project_id,
+        workspace_id
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    result = await get_dataset_column_operations(
+        db,
+        dataset_id
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
+
+    return {
+        "dataset_id": dataset_id,
+        "columns": result
+    }
+
+

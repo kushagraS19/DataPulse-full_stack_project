@@ -317,3 +317,43 @@ async def get_chart_table_data(
     }
 
 
+async def get_chart_data(
+    db: AsyncSession,
+    chart_id: int,
+    dashboard_id: int
+):
+    result = await db.execute(
+        select(Chart).where(
+            Chart.id == chart_id,
+            Chart.dashboard_id == dashboard_id
+        )
+    )
+
+    chart = result.scalar_one_or_none()
+
+    if chart is None:
+        return None
+
+    data = await run_chart_query(
+        db=db,
+        dataset_id=chart.dataset_id,
+        group_by=chart.group_by,
+        operation=chart.operation,
+        column=chart.column
+    )
+
+    return {
+        "chart_id": chart.id,
+        "name": chart.name,
+        "chart_type": chart.chart_type,
+        "configuration": {
+            "dataset_id": chart.dataset_id,
+            "group_by": chart.group_by,
+            "operation": chart.operation,
+            "column": chart.column
+        },
+        "data": data
+    }
+
+
+    

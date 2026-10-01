@@ -23,6 +23,11 @@ class Dataset(Base):
         nullable=False
     )
 
+    table_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False
+    )
+
     project_id: Mapped[int] = mapped_column(
         ForeignKey(
             "projects.id",
