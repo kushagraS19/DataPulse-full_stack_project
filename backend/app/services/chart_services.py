@@ -403,7 +403,6 @@ async def get_chart_data(
         "data": data
     }
 
-
 async def delete_dashboard_charts(
     db: AsyncSession,
     dashboard_id: int
