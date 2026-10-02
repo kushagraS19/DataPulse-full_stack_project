@@ -324,7 +324,15 @@ async def get_chart_table_data(
 async def get_chart_data(
     db: AsyncSession,
     chart_id: int,
-    dashboard_id: int
+    dashboard_id: int,
+    chart_type: str,
+    dataset_id: int,
+    table_name: str,
+    group_by: str | None,
+    operation: str | None,
+    column: str | None,
+    x_column: str | None = None,
+    y_column: str | None = None
 ):
     result = await db.execute(
         select(Chart).where(
@@ -338,23 +346,59 @@ async def get_chart_data(
     if chart is None:
         return None
 
-    data = await run_chart_query(
-        db=db,
-        dataset_id=chart.dataset_id,
-        group_by=chart.group_by,
-        operation=chart.operation,
-        column=chart.column
-    )
+    if chart_type == "scatter":
+
+        if (
+            x_column is None
+            or y_column is None
+        ):
+            raise ValueError(
+                "Scatter chart requires x_column and y_column"
+            )
+
+        from sqlalchemy import text
+
+        query = text(
+            f"""
+            SELECT
+                "{x_column}" AS "{x_column}",
+                "{y_column}" AS "{y_column}"
+            FROM "{table_name}"
+            WHERE
+                "{x_column}" IS NOT NULL
+                AND "{y_column}" IS NOT NULL
+            """
+        )
+
+        result = await db.execute(query)
+
+        data = [
+            dict(row)
+            for row in result.mappings().all()
+        ]
+
+    else:
+
+        data = await run_chart_query(
+            db=db,
+            dataset_id=dataset_id,
+            group_by=group_by,
+            operation=operation,
+            column=column
+        )
 
     return {
         "chart_id": chart.id,
         "name": chart.name,
         "chart_type": chart.chart_type,
         "configuration": {
-            "dataset_id": chart.dataset_id,
-            "group_by": chart.group_by,
-            "operation": chart.operation,
-            "column": chart.column
+            "dataset_id": dataset_id,
+            "table_name": table_name,
+            "group_by": group_by,
+            "operation": operation,
+            "column": column,
+            "x_column": x_column,
+            "y_column": y_column
         },
         "data": data
     }
@@ -378,3 +422,4 @@ async def delete_dashboard_charts(
     await db.flush()
 
 
+    

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.models.chart_model import Chart
 
 from app.core.dependencies import get_current_user
 from app.database.database import get_db
@@ -682,18 +684,58 @@ async def get_chart_data_endpoint(
             detail="Dashboard not found"
         )
 
-    result = await get_chart_data(
-        db,
-        chart_id,
-        dashboard_id
+    chart_result = await db.execute(
+        select(Chart).where(
+            Chart.id == chart_id,
+            Chart.dashboard_id == dashboard_id
+        )
     )
 
-    if result is None:
+    chart = chart_result.scalar_one_or_none()
+
+    if chart is None:
         raise HTTPException(
             status_code=404,
             detail="Chart not found"
         )
 
-    return result
+    dataset = await get_dataset_by_id(
+        db,
+        chart.dataset_id,
+        project_id
+    )
 
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
 
+    try:
+        chart_data = await get_chart_data(
+            db=db,
+            chart_id=chart.id,
+            dashboard_id=dashboard_id,
+            chart_type=chart.chart_type,
+            dataset_id=chart.dataset_id,
+            table_name=dataset.table_name,
+            group_by=chart.group_by,
+            operation=chart.operation,
+            column=chart.column,
+            x_column=chart.x_column,
+            y_column=chart.y_column
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    if chart_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Chart not found"
+        )
+
+    return chart_data
