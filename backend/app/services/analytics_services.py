@@ -272,6 +272,7 @@ async def group_by_column(
         orient="records"
     )
 
+
 async def filter_dataset(
     db: AsyncSession,
     dataset_id: int,
@@ -628,3 +629,147 @@ async def run_chart_query(
     return grouped_data.to_dict(
         orient="records"
     )
+
+
+async def calculate_numeric_correlations(
+    db: AsyncSession,
+    dataset_id: int,
+    pairs: list[dict]
+):
+    dataset_result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id
+        )
+    )
+
+    dataset = dataset_result.scalar_one_or_none()
+
+    if dataset is None:
+        return None
+
+    correlations = []
+
+    for pair in pairs:
+
+        x_column = pair["x"]
+        y_column = pair["y"]
+
+        query = text(
+            f'''
+            SELECT
+                CORR(
+                    "{x_column}",
+                    "{y_column}"
+                ) AS correlation
+            FROM "{dataset.table_name}"
+            '''
+        )
+
+        result = await db.execute(query)
+
+        row = result.fetchone()
+
+        correlation = row.correlation
+
+        if correlation is None:
+            continue
+
+        correlations.append({
+            "x": x_column,
+            "y": y_column,
+            "correlation": round(
+                float(correlation),
+                4
+            )
+        })
+
+    return correlations
+
+
+async def get_date_column_profile(
+    db: AsyncSession,
+    dataset_id: int,
+    date_column: str
+):
+    dataset_result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id
+        )
+    )
+
+    dataset = dataset_result.scalar_one_or_none()
+
+    if dataset is None:
+        return None
+
+    query = text(
+        f'''
+        SELECT
+            MIN("{date_column}") AS min_date,
+            MAX("{date_column}") AS max_date,
+            COUNT("{date_column}") AS non_null_count,
+            COUNT(DISTINCT "{date_column}") AS unique_dates
+        FROM "{dataset.table_name}"
+        '''
+    )
+
+    result = await db.execute(query)
+
+    row = result.fetchone()
+
+    if row is None:
+        return None
+
+    min_date = row.min_date
+    max_date = row.max_date
+
+    date_range_days = None
+
+    if min_date is not None and max_date is not None:
+        date_range_days = (
+            max_date - min_date
+        ).days
+
+    return {
+        "column": date_column,
+        "min_date": min_date,
+        "max_date": max_date,
+        "non_null_count": row.non_null_count,
+        "unique_dates": row.unique_dates,
+        "date_range_days": date_range_days
+    }
+
+
+def determine_date_granularity(
+    date_profile: dict
+):
+    date_range_days = date_profile.get(
+        "date_range_days"
+    )
+
+    unique_dates = date_profile.get(
+        "unique_dates",
+        0
+    )
+
+    if date_range_days is None:
+        return None
+
+    if date_range_days <= 31:
+
+        return "day"
+
+    if date_range_days <= 180:
+
+        if unique_dates >= 20:
+            return "week"
+
+        return "month"
+
+    if date_range_days <= 730:
+
+        return "month"
+
+    return "year"
+
+

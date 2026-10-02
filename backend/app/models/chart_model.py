@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -33,12 +33,12 @@ class Chart(Base):
     )
 
     dataset_id: Mapped[int] = mapped_column(
-    ForeignKey(
-        "datasets.id",
-        ondelete="CASCADE"
-    ),
-    index=True
-)
+        ForeignKey(
+            "datasets.id",
+            ondelete="CASCADE"
+        ),
+        index=True
+    )
 
     group_by: Mapped[str | None] = mapped_column(
         String(255),
@@ -51,6 +51,16 @@ class Chart(Base):
     )
 
     column: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    x_column: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    y_column: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True
     )

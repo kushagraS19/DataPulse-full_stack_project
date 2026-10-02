@@ -396,3 +396,89 @@ async def get_dataset_column_operations(
     return result
 
 
+async def get_dataset_column_statistics(
+    db: AsyncSession,
+    dataset_id: int
+):
+    dataset_result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id
+        )
+    )
+
+    dataset = dataset_result.scalar_one_or_none()
+
+    if dataset is None:
+        return None
+
+    query = text(
+        """
+        SELECT
+            column_name,
+            data_type
+        FROM information_schema.columns
+        WHERE table_name = :table_name
+        AND column_name != 'id'
+        ORDER BY ordinal_position
+        """
+    )
+
+    result = await db.execute(
+        query,
+        {
+            "table_name": dataset.table_name
+        }
+    )
+
+    columns = result.fetchall()
+
+    statistics = []
+
+    for column in columns:
+        column_name = column.column_name
+
+        count_query = text(
+            f'''
+            SELECT
+                COUNT(*) AS total_count,
+                COUNT("{column_name}") AS non_null_count,
+                COUNT(*) - COUNT("{column_name}") AS null_count,
+                COUNT(DISTINCT "{column_name}") AS unique_count
+            FROM "{dataset.table_name}"
+            '''
+        )
+
+        count_result = await db.execute(
+            count_query
+        )
+
+        counts = count_result.fetchone()
+
+        total_count = counts.total_count
+        non_null_count = counts.non_null_count
+        null_count = counts.null_count
+        unique_count = counts.unique_count
+
+        if total_count > 0:
+            missing_percentage = (
+                null_count / total_count
+            ) * 100
+        else:
+            missing_percentage = 0
+
+        statistics.append({
+            "name": column_name,
+            "data_type": column.data_type,
+            "total_count": total_count,
+            "non_null_count": non_null_count,
+            "null_count": null_count,
+            "unique_count": unique_count,
+            "missing_percentage": round(
+                missing_percentage,
+                2
+            )
+        })
+
+    return statistics
+
+

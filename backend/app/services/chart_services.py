@@ -14,12 +14,14 @@ from app.models.dataset_model import Dataset
 async def create_chart(
     db: AsyncSession,
     dashboard_id: int,
-    dataset_id:int,
+    dataset_id: int,
     name: str,
     chart_type: str,
     group_by: str | None,
     operation: str | None,
-    column: str | None
+    column: str | None,
+    x_column: str | None = None,
+    y_column: str | None = None
 ):
     chart = Chart(
         name=name,
@@ -28,7 +30,9 @@ async def create_chart(
         dataset_id=dataset_id,
         group_by=group_by,
         operation=operation,
-        column=column
+        column=column,
+        x_column=x_column,
+        y_column=y_column
     )
 
     db.add(chart)
@@ -356,4 +360,21 @@ async def get_chart_data(
     }
 
 
-    
+async def delete_dashboard_charts(
+    db: AsyncSession,
+    dashboard_id: int
+):
+    result = await db.execute(
+        select(Chart).where(
+            Chart.dashboard_id == dashboard_id
+        )
+    )
+
+    charts = result.scalars().all()
+
+    for chart in charts:
+        await db.delete(chart)
+
+    await db.flush()
+
+
