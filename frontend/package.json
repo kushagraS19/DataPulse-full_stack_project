@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.20.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
@@ -18,7 +19,8 @@
     "powerbi-client-react": "^2.0.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.4"
+    "react-router-dom": "^7.18.4",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
