@@ -25,3 +25,24 @@ export const generateDashboard = async ({
 
   return response.data;
 };
+
+export const getChartData = async ({
+  chartId,
+  dashboardId,
+  projectId,
+  workspaceId,
+  token,
+}) => {
+  const response = await axios.get(`${API_URL}/charts/${chartId}/data`, {
+    params: {
+      dashboard_id: dashboardId,
+      project_id: projectId,
+      workspace_id: workspaceId,
+    },
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return response.data;
+};

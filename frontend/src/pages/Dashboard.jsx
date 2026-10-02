@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 
-import { generateDashboard } from '../api/dashboard_api';
+import { generateDashboard, getChartData } from '../api/dashboard_api';
 
 import ChartCard from '../components/dashboard/ChartCard';
 import ChartRenderer from '../components/dashboard/ChartRenderer';
 
 function Dashboard() {
   const [dashboard, setDashboard] = useState(null);
+  const [chartData, setChartData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -27,7 +28,9 @@ function Dashboard() {
           throw new Error('Authentication token not found');
         }
 
-        const data = await generateDashboard({
+        // Generate dashboard configuration
+
+        const dashboardResponse = await generateDashboard({
           dashboardId,
           datasetId,
           projectId,
@@ -35,9 +38,44 @@ function Dashboard() {
           token,
         });
 
-        setDashboard(data);
+        setDashboard(dashboardResponse);
+
+        // Fetch data for every chart
+
+        const chartResponses = await Promise.all(
+          dashboardResponse.charts.map(async (chart) => {
+            const response = await getChartData({
+              chartId: chart.id,
+              dashboardId,
+              projectId,
+              workspaceId,
+              token,
+            });
+
+            return {
+              chartId: chart.id,
+              data: response.data || [],
+            };
+          }),
+        );
+
+        // Convert responses into:
+
+        // {
+        //     47: [...],
+        //     48: [...],
+        //     49: [...]
+        // }
+
+        const chartDataMap = chartResponses.reduce((accumulator, chart) => {
+          accumulator[chart.chartId] = chart.data;
+
+          return accumulator;
+        }, {});
+
+        setChartData(chartDataMap);
       } catch (error) {
-        console.error('Dashboard generation failed:', error);
+        console.error('Dashboard loading failed:', error);
 
         setError(
           error.response?.data?.detail ||
@@ -175,7 +213,7 @@ function Dashboard() {
                   console.log('Expand chart:', chart);
                 }}
               >
-                <ChartRenderer chart={chart} data={[]} />
+                <ChartRenderer chart={chart} data={chartData[chart.id] || []} />
               </ChartCard>
             ))}
           </div>
