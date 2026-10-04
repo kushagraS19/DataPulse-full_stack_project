@@ -1,14 +1,15 @@
 import axios from 'axios';
 
+const API_URL = 'http://localhost:8000';
+
 const authApi = axios.create({
-  baseURL: 'http://127.0.0.1:8000',
+  baseURL: API_URL,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
-// Add access token to every request
+let refreshPromise = null;
+
+// Attach the current access token to normal API requests
 authApi.interceptors.request.use(
   (config) => {
     const accessToken = localStorage.getItem('access_token');
@@ -19,44 +20,85 @@ authApi.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  },
+  (error) => Promise.reject(error),
 );
 
 // Handle expired access tokens
 authApi.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
 
   async (error) => {
     const originalRequest = error.config;
 
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    const requestUrl = originalRequest.url || '';
+
+    const isRefreshRequest = requestUrl.includes('/auth/refresh');
+    const isLoginRequest = requestUrl.includes('/auth/login');
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes('/auth/refresh')
+      !isRefreshRequest &&
+      !isLoginRequest
     ) {
       originalRequest._retry = true;
 
       try {
-        const response = await axios.post(
-          'http://127.0.0.1:8000/auth/refresh',
-          {},
-          {
-            withCredentials: true,
-          },
-        );
+        /*
+         * Use plain axios here instead of authApi.
+         *
+         * This prevents the refresh request from passing
+         * through the same response interceptor again.
+         */
+        if (!refreshPromise) {
+          refreshPromise = axios
+            .post(
+              `${API_URL}/auth/refresh`,
+              {},
+              {
+                withCredentials: true,
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              },
+            )
+            .then((response) => {
+              const newAccessToken = response.data.access_token;
 
-        const newAccessToken = response.data.access_token;
+              if (!newAccessToken) {
+                throw new Error('Access token was not returned');
+              }
 
-        localStorage.setItem('access_token', newAccessToken);
+              localStorage.setItem('access_token', newAccessToken);
 
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+              return newAccessToken;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const newAccessToken = await refreshPromise;
+
+        originalRequest.headers = {
+          ...originalRequest.headers,
+          Authorization: `Bearer ${newAccessToken}`,
+        };
 
         return authApi(originalRequest);
       } catch (refreshError) {
+        console.log(
+          'REFRESH ERROR:',
+          refreshError.response?.status,
+          refreshError.response?.data,
+        );
+
+        refreshPromise = null;
+
         localStorage.removeItem('access_token');
 
         return Promise.reject(refreshError);
