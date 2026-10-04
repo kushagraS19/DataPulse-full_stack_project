@@ -8,18 +8,30 @@ from alembic import context
 
 from app.core.config import settings
 from app.models.base import Base
+
+# Import every model so Alembic can detect all tables.
 from app.models.user_model import User
 from app.models.workspace_model import Workspace
 from app.models.project_model import Project
 from app.models.dataset_model import Dataset
+from app.models.dataset_row_model import DatasetRow
+from app.models.dashboard_model import Dashboard
+from app.models.chart_model import Chart
+from app.models.email_verification_otp_model import EmailVerificationOTP
+from app.models.login_attempt_model import LoginAttempt
+from app.models.password_change_otp_model import PasswordChangeOTP
+from app.models.password_reset_otp_model import PasswordResetOTP
+from app.models.refresh_token_model import RefreshToken
 
 
 config = context.config
+
 
 config.set_main_option(
     "sqlalchemy.url",
     settings.DATABASE_URL.replace("%", "%%")
 )
+
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -1,22 +1,30 @@
+import os
+
+import pandas as pd
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dataset_model import Dataset
 from app.models.dataset_row_model import DatasetRow
 
-import pandas as pd
 
 async def create_dataset(
     db: AsyncSession,
     project_id: int,
     name: str,
-    file_path: str
+    file_path: str,
+    row_count: int = 0,
+    column_count: int = 0,
+    file_size: int = 0
 ):
     dataset = Dataset(
         name=name,
         file_path=file_path,
         project_id=project_id,
-        table_name="pending"
+        table_name="pending",
+        row_count=row_count,
+        column_count=column_count,
+        file_size=file_size
     )
 
     db.add(dataset)
@@ -32,9 +40,35 @@ async def create_dataset(
     return dataset
 
 
+async def rename_dataset(
+    db: AsyncSession,
+    dataset_id: int,
+    project_id: int,
+    name: str
+):
+    result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id,
+            Dataset.project_id == project_id
+        )
+    )
+
+    dataset = result.scalar_one_or_none()
+
+    if dataset is None:
+        return None
+
+    dataset.name = name.strip()
+
+    await db.commit()
+    await db.refresh(dataset)
+
+    return dataset
+
+
 async def get_project_datasets(
-        db : AsyncSession,
-        project_id : int
+    db: AsyncSession,
+    project_id: int
 ):
     result = await db.execute(
         select(Dataset)
@@ -128,7 +162,7 @@ async def get_dataset_data(
 
     return {
         "dataset_id": dataset.id,
-        "project_id":dataset.project_id,
+        "project_id": dataset.project_id,
         "name": dataset.name,
         "columns": df.columns.tolist(),
         "row_count": len(df),
@@ -242,7 +276,7 @@ async def create_dataset_table(
     create_table_query = text(
         f"""
         CREATE TABLE "{table_name}" (
-            "id" BIGSERIAL PRIMARY KEY,
+            "_row_id" BIGSERIAL PRIMARY KEY,
             {columns_sql}
         )
         """
@@ -302,6 +336,77 @@ async def create_dataset_table(
     }
 
 
+async def delete_dataset(
+    db: AsyncSession,
+    dataset_id: int,
+    project_id: int
+):
+    result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id,
+            Dataset.project_id == project_id
+        )
+    )
+
+    dataset = result.scalar_one_or_none()
+
+    if dataset is None:
+        return None
+
+    file_path = dataset.file_path
+    table_name = dataset.table_name
+
+    try:
+        # Delete stored dataset rows first.
+        await db.execute(
+            text(
+                """
+                DELETE FROM dataset_rows
+                WHERE dataset_id = :dataset_id
+                """
+            ),
+            {
+                "dataset_id": dataset_id
+            }
+        )
+
+        # Drop the analytical table created for this dataset.
+        if (
+            table_name
+            and table_name != "pending"
+        ):
+            await db.execute(
+                text(
+                    f'DROP TABLE IF EXISTS "{table_name}"'
+                )
+            )
+
+        # Delete the dataset database record.
+        await db.delete(dataset)
+
+        await db.commit()
+
+    except Exception:
+        await db.rollback()
+        raise
+
+    # Remove the processed CSV file after the database
+    # deletion has completed successfully.
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+
+        except OSError as e:
+            raise ValueError(
+                f"Dataset was deleted, but the stored file could not be removed: {str(e)}"
+            )
+
+    return {
+        "message": "Dataset deleted successfully",
+        "dataset_id": dataset_id
+    }
+
+
 async def get_dataset_columns(
     db: AsyncSession,
     dataset_id: int
@@ -322,7 +427,7 @@ async def get_dataset_columns(
         SELECT column_name, data_type
         FROM information_schema.columns
         WHERE table_name = :table_name
-        AND column_name != 'id'
+        AND column_name != '_row_id'
         ORDER BY ordinal_position
         """
     )
@@ -418,7 +523,7 @@ async def get_dataset_column_statistics(
             data_type
         FROM information_schema.columns
         WHERE table_name = :table_name
-        AND column_name != 'id'
+        AND column_name != '_row_id'
         ORDER BY ordinal_position
         """
     )
@@ -480,5 +585,3 @@ async def get_dataset_column_statistics(
         })
 
     return statistics
-
-

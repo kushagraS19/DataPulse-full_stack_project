@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -29,4 +29,14 @@ class Workspace(Base):
         default=datetime.utcnow,
         nullable=False
     )
-    
+
+    owner: Mapped["User"] = relationship(
+        "User",
+        back_populates="workspaces"
+    )
+
+    projects: Mapped[list["Project"]] = relationship(
+        "Project",
+        back_populates="workspace",
+        cascade="all, delete-orphan"
+    )

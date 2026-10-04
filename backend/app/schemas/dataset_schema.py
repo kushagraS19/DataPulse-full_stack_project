@@ -10,6 +10,10 @@ class DatasetCreate(BaseModel):
     workspace_id : int
 
 
+class DatasetUpdate(BaseModel):
+    name: str
+
+
 class DatasetResponse(BaseModel):
     id: int
     name: str

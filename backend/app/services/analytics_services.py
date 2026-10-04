@@ -1,6 +1,6 @@
 import pandas as pd
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dataset_model import Dataset

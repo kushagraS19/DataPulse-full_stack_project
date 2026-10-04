@@ -37,6 +37,21 @@ class Dataset(Base):
         index=True
     )
 
+    row_count: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0
+    )
+
+    column_count: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0
+    )
+
+    file_size: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,

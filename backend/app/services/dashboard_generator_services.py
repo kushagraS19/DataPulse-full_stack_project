@@ -8,6 +8,7 @@ from app.services.dataset_services import (
 from app.dashboard_engine.column_analyzer import (
     classify_columns
 )
+from app.services.analytics_services import calculate_kpi
 
 from app.dashboard_engine.numeric_analyzer import (
     calculate_numeric_scores,
@@ -156,10 +157,25 @@ async def generate_dashboard_config(
     # 5. KPI GENERATION
     # --------------------------------------------------
 
-    kpis = generate_kpis(
+    kpi_definitions = generate_kpis(
         ranked_numeric_columns,
         primary_numeric_column
     )
+
+    kpis = []
+
+    for kpi in kpi_definitions:
+        value = await calculate_kpi(
+            db,
+            dataset_id,
+            kpi["operation"],
+            kpi["column"]
+        )
+
+        kpis.append({
+            **kpi,
+            "value": value
+        })
 
     # --------------------------------------------------
     # 6. CHART GENERATION

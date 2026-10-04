@@ -5,19 +5,23 @@ from fastapi import (
     UploadFile,
     File
 )
+
+import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 import os
 import uuid
-import csv
 
 from app.core.dependencies import get_current_user
 from app.database.database import get_db
+from app.models.dataset_model import Dataset
 from app.models.user_model import User
 from app.schemas.dataset_schema import (
     DatasetCreate,
     DatasetResponse,
-    DatasetPreviewResponse
+    DatasetPreviewResponse,
+    DatasetUpdate
 )
 from app.services.dataset_services import (
     create_dataset,
@@ -26,12 +30,15 @@ from app.services.dataset_services import (
     get_dataset_data,
     create_dataset_table,
     get_dataset_columns,
-    get_dataset_column_operations
+    get_dataset_column_operations,
+    delete_dataset,
+    rename_dataset
 )
 
 from app.services.project_services import get_project_by_id
 from app.services.workspace_services import get_workspace_by_id
 from app.services.data_processing_services import process_csv
+from app.services.data_profiling_services import profile_dataset
 
 
 router = APIRouter(
@@ -46,13 +53,11 @@ MAX_FILE_SIZE = 50 * 1024 * 1024
     "/",
     response_model=DatasetResponse
 )
-
 async def create_new_dataset(
     data: DatasetCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-
     project = await get_project_by_id(
         db,
         data.project_id,
@@ -83,6 +88,72 @@ async def create_new_dataset(
         data.name,
         data.file_path
     )
+
+    return dataset
+
+
+@router.patch(
+    "/{dataset_id}",
+    response_model=DatasetResponse
+)
+async def rename_dataset_endpoint(
+    dataset_id: int,
+    data: DatasetUpdate,
+    project_id: int,
+    workspace_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    project = await get_project_by_id(
+        db,
+        project_id,
+        workspace_id
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    name = data.name.strip()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Dataset name cannot be empty"
+        )
+
+    if len(name) > 255:
+        raise HTTPException(
+            status_code=400,
+            detail="Dataset name must be 255 characters or less"
+        )
+
+    dataset = await rename_dataset(
+        db,
+        dataset_id,
+        project_id,
+        name
+    )
+
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
 
     return dataset
 
@@ -204,7 +275,6 @@ async def upload_dataset(
         while chunk := await file.read(
             1024 * 1024
         ):
-
             file_size += len(chunk)
 
             if file_size > MAX_FILE_SIZE:
@@ -255,11 +325,17 @@ async def upload_dataset(
             detail=f"Failed to save processed CSV: {str(e)}"
         )
 
+    row_count = len(df)
+    column_count = len(df.columns)
+
     dataset = await create_dataset(
         db,
         project_id,
         file.filename,
-        processed_file_path
+        processed_file_path,
+        row_count=row_count,
+        column_count=column_count,
+        file_size=file_size
     )
 
     try:
@@ -322,6 +398,68 @@ async def get_project_dataset_list(
     )
 
     return datasets
+
+
+@router.delete(
+    "/{dataset_id}",
+)
+async def delete_dataset_endpoint(
+    dataset_id: int,
+    project_id: int,
+    workspace_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    project = await get_project_by_id(
+        db,
+        project_id,
+        workspace_id
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    try:
+        result = await delete_dataset(
+            db,
+            dataset_id,
+            project_id
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete dataset: {str(e)}"
+        )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
+
+    return result
 
 
 @router.get(
@@ -418,7 +556,8 @@ async def get_dataset_data_endpoint(
     try:
         result = await get_dataset_data(
             db,
-            dataset_id
+            dataset_id,
+            project_id
         )
 
     except ValueError as e:
@@ -436,7 +575,9 @@ async def get_dataset_data_endpoint(
     return result
 
 
-@router.get("/{dataset_id}/columns")
+@router.get(
+    "/{dataset_id}/columns"
+)
 async def get_dataset_columns_endpoint(
     dataset_id: int,
     project_id: int,
@@ -485,7 +626,88 @@ async def get_dataset_columns_endpoint(
     }
 
 
-@router.get("/{dataset_id}/column-operations")
+@router.get("/{dataset_id}/profile")
+async def get_dataset_profile_endpoint(
+    dataset_id: int,
+    project_id: int,
+    workspace_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    project = await get_project_by_id(
+        db,
+        project_id,
+        workspace_id
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    result = await db.execute(
+        select(Dataset).where(
+            Dataset.id == dataset_id,
+            Dataset.project_id == project_id
+        )
+    )
+
+    dataset = result.scalar_one_or_none()
+
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found"
+        )
+
+    try:
+        df = pd.read_csv(dataset.file_path)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read dataset: {str(e)}"
+        )
+
+    try:
+        profile = profile_dataset(df)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to profile dataset: {str(e)}"
+        )
+
+    return {
+        "dataset_id": dataset.id,
+        "project_id": dataset.project_id,
+        "name": dataset.name,
+        "profile": profile
+    }
+
+
+@router.get(
+    "/{dataset_id}/column-operations"
+)
 async def get_dataset_column_operations_endpoint(
     dataset_id: int,
     project_id: int,
@@ -532,5 +754,3 @@ async def get_dataset_column_operations_endpoint(
         "dataset_id": dataset_id,
         "columns": result
     }
-
-
