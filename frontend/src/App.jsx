@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 import ProtectedRoute from './components/ProtectedRoute';
+import AuthenticatedLayout from './components/AuthenticatedLayout';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -13,45 +14,32 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes */}
         <Route path='/login' element={<Login />} />
-
         <Route path='/register' element={<Register />} />
 
+        {/* Protected application routes */}
         <Route
-          path='/profile'
           element={
             <ProtectedRoute>
-              <Profile />
+              <AuthenticatedLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path='/profile' element={<Profile />} />
 
-        <Route
-          path='/workspace'
-          element={
-            <ProtectedRoute>
-              <Workspace />
-            </ProtectedRoute>
-          }
-        />
+          <Route path='/workspace' element={<Workspace />} />
 
-        <Route
-          path='/workspaces/:workspaceId/projects/:projectId'
-          element={
-            <ProtectedRoute>
-              <ProjectDashboard />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path='/workspaces/:workspaceId/projects/:projectId'
+            element={<ProjectDashboard />}
+          />
 
-        <Route
-          path='/workspaces/:workspaceId/projects/:projectId/datasets'
-          element={
-            <ProtectedRoute>
-              <Datasets />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path='/workspaces/:workspaceId/projects/:projectId/datasets'
+            element={<Datasets />}
+          />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
