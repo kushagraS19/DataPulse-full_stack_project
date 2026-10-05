@@ -60,7 +60,7 @@ function Sidebar() {
           type='button'
           onClick={() => {
             closeMobile();
-            navigate('/workspace');
+            navigate('/home');
           }}
           className='group flex items-center gap-3'
         >
@@ -87,11 +87,7 @@ function Sidebar() {
         </p>
 
         <nav className='space-y-1'>
-          <NavLink
-            to='/workspace'
-            className={navItemClass}
-            onClick={closeMobile}
-          >
+          <NavLink to='/home' className={navItemClass} onClick={closeMobile}>
             <span className='text-base'>⌂</span>
             <span>Home</span>
           </NavLink>

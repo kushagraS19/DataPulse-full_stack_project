@@ -5,6 +5,7 @@ import AuthenticatedLayout from './components/AuthenticatedLayout';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Home from './pages/Home';
 import Profile from './pages/profile';
 import Workspace from './pages/Workspace';
 import ProjectDashboard from './pages/ProjectDashboard';
@@ -26,6 +27,8 @@ function App() {
             </ProtectedRoute>
           }
         >
+          <Route path='/home' element={<Home />} />
+
           <Route path='/profile' element={<Profile />} />
 
           <Route path='/workspace' element={<Workspace />} />
