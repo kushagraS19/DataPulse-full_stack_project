@@ -27,8 +27,18 @@ class Dashboard(Base):
         index=True
     )
 
+    dataset_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "datasets.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        unique=True,
+        index=True,
+        )   
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
         nullable=False
-    )
+        )

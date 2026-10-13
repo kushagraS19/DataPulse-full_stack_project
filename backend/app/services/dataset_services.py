@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dataset_model import Dataset
 from app.models.dataset_row_model import DatasetRow
+from app.models.dashboard_model import Dashboard
 
 
 async def create_dataset(
@@ -17,27 +18,40 @@ async def create_dataset(
     column_count: int = 0,
     file_size: int = 0
 ):
-    dataset = Dataset(
-        name=name,
-        file_path=file_path,
-        project_id=project_id,
-        table_name="pending",
-        row_count=row_count,
-        column_count=column_count,
-        file_size=file_size
-    )
+    try:
+        dataset = Dataset(
+            name=name,
+            file_path=file_path,
+            project_id=project_id,
+            table_name="pending",
+            row_count=row_count,
+            column_count=column_count,
+            file_size=file_size
+        )
 
-    db.add(dataset)
+        db.add(dataset)
 
-    await db.flush()
+        await db.flush()
 
-    dataset.table_name = f"dataset_{dataset.id}_data"
+        dataset.table_name = f"dataset_{dataset.id}_data"
 
-    await db.commit()
+        dashboard = Dashboard(
+            name=f"{name} Dashboard",
+            project_id=project_id,
+            dataset_id=dataset.id,
+        )
 
-    await db.refresh(dataset)
+        db.add(dashboard)
 
-    return dataset
+        await db.commit()
+
+        await db.refresh(dataset)
+
+        return dataset
+
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def rename_dataset(
@@ -585,3 +599,5 @@ async def get_dataset_column_statistics(
         })
 
     return statistics
+
+

@@ -1,5 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import numpy as np
+from datetime import date, datetime
+
 from app.services.dataset_services import (
     get_dataset_columns,
     get_dataset_column_statistics
@@ -39,6 +42,28 @@ from app.dashboard_engine.insight_generator import (
     generate_insights
 )
 
+def make_json_safe(value):
+    """Convert NumPy and common Python values to JSON-safe values."""
+
+    if isinstance(value, np.generic):
+        return make_json_safe(value.item())
+
+    if isinstance(value, np.ndarray):
+        return make_json_safe(value.tolist())
+
+    if isinstance(value, dict):
+        return {
+            str(key): make_json_safe(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, (list, tuple)):
+        return [make_json_safe(item) for item in value]
+
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
+    return value
 
 async def generate_dashboard_config(
     db: AsyncSession,
@@ -184,6 +209,9 @@ async def generate_dashboard_config(
 
     print("PRIMARY NUMERIC:", primary_numeric_column)
     print("PRIMARY CATEGORICAL:", primary_categorical_column)
+    print("CATEGORY CARDINALITY:", categorical_cardinality)
+    print("DATE PROFILES:", date_profiles)
+    print("CORRELATIONS:", correlations)
     charts = generate_charts(
         primary_numeric_column=(
             primary_numeric_column
@@ -226,29 +254,22 @@ async def generate_dashboard_config(
     # 9. FINAL DASHBOARD CONFIGURATION
     # --------------------------------------------------
 
-    return {
-        "dataset_id": dataset_id,
-
-        "detected_columns": {
-            "numeric": numeric_columns,
-            "categorical": categorical_columns,
-            "date": date_columns,
-            "identifier": identifier_columns
+    config = {
+    "dataset_id": dataset_id,
+    "detected_columns": {
+        "numeric": numeric_columns,
+        "categorical": categorical_columns,
+        "date": date_columns,
+        "identifier": identifier_columns,
         },
-
-        "numeric_scores": numeric_scores,
-
-        "numeric_pairs": numeric_pairs,
-
-        "correlations": correlations,
-
-        "date_profiles": date_profiles,
-
-        "date_granularities": date_granularities,
-
-        "kpis": kpis,
-
-        "charts": charts,
-
-        "insights": insights
+    "numeric_scores": numeric_scores,
+    "numeric_pairs": numeric_pairs,
+    "correlations": correlations,
+    "date_profiles": date_profiles,
+    "date_granularities": date_granularities,
+    "kpis": kpis,
+    "charts": charts,
+    "insights": insights,
     }
+
+    return make_json_safe(config)
