@@ -33,6 +33,7 @@ function Datasets() {
 
   const [datasets, setDatasets] = useState([]);
   const [loadingDatasets, setLoadingDatasets] = useState(true);
+  const [deletingDatasetId, setDeletingDatasetId] = useState(null);
 
   // ==========================================================
   // STATE: DATASET DETAILS
@@ -242,6 +243,53 @@ function Datasets() {
       setError(getErrorMessage(error, 'Failed to upload dataset.'));
     } finally {
       setUploading(false);
+    }
+  };
+
+  // ==========================================================
+  // DATASET DELETION
+  // ==========================================================
+
+  const handleDeleteDataset = async (dataset) => {
+    const confirmed = window.confirm(
+      `Delete "${dataset.name}"? This will permanently remove the dataset and its associated dashboard and charts.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (!workspaceId || !projectId) {
+      setError('Workspace or project information is missing.');
+      return;
+    }
+
+    try {
+      setDeletingDatasetId(dataset.id);
+      setError('');
+      setMessage('');
+
+      await authApi.delete(`/datasets/${dataset.id}`, {
+        params: {
+          project_id: Number(projectId),
+          workspace_id: Number(workspaceId),
+        },
+      });
+
+      setDatasets((currentDatasets) =>
+        currentDatasets.filter((item) => item.id !== dataset.id),
+      );
+
+      if (selectedDataset?.id === dataset.id) {
+        closeDatasetDetails();
+      }
+
+      setMessage(`Dataset "${dataset.name}" deleted successfully.`);
+    } catch (error) {
+      console.error('Dataset deletion failed:', error);
+      setError(getErrorMessage(error, 'Failed to delete dataset.'));
+    } finally {
+      setDeletingDatasetId(null);
     }
   };
 
@@ -663,9 +711,21 @@ function Datasets() {
                             `/workspaces/${workspaceId}/projects/${projectId}/datasets/${dataset.id}/dashboard`,
                           )
                         }
-                        className='rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700'
+                        disabled={deletingDatasetId !== null}
+                        className='rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50'
                       >
                         Analyze Dataset
+                      </button>
+
+                      <button
+                        type='button'
+                        onClick={() => handleDeleteDataset(dataset)}
+                        disabled={deletingDatasetId !== null}
+                        className='rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50'
+                      >
+                        {deletingDatasetId === dataset.id
+                          ? 'Deleting...'
+                          : 'Delete'}
                       </button>
 
                       <span className='rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700'>
