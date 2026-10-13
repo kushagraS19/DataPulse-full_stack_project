@@ -16,6 +16,7 @@ CATEGORICAL_TYPES = {
     "character varying",
     "character",
     "varchar",
+    "boolean",
 }
 
 DATE_TYPES = {
@@ -89,12 +90,10 @@ def classify_columns(
                 or name_lower.endswith("id")
             )
 
-            is_high_cardinality = (
-                total_count > 0
-                and unique_count / total_count >= 0.95
-            )
-
-            if is_id_name or is_high_cardinality:
+            # High cardinality alone does not make a numeric field an ID:
+            # sales, salary, prices, ratings, and measurements can all be unique.
+            # Treat a numeric field as an identifier only when its name indicates one.
+            if is_id_name:
                 identifier_columns.append(column_name)
             else:
                 numeric_columns.append(column_name)
@@ -128,10 +127,14 @@ def classify_columns(
 
             cardinality_ratio = unique_count / total_count
 
-            if (
-                unique_count <= 20
-                and cardinality_ratio <= 0.5
-            ):
+            # Booleans are categorical regardless of their 2/total cardinality ratio.
+            if data_type == "boolean":
+                categorical_columns.append(column_name)
+            elif cardinality_ratio >= 0.95:
+                # High-cardinality text fields such as customer names are identifiers,
+                # not useful categories for grouping every chart.
+                identifier_columns.append(column_name)
+            elif unique_count <= 50 and cardinality_ratio <= 0.5:
                 categorical_columns.append(column_name)
 
     return {

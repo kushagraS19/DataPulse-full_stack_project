@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import date, datetime
 
 from app.models.dataset_model import Dataset
 from app.models.dataset_row_model import DatasetRow
@@ -462,6 +463,104 @@ async def get_dataset_columns(
         }
         for column in columns
     ]
+
+
+
+async def detect_text_date_columns(
+    db: AsyncSession,
+    dataset_id: int,
+    sample_size: int = 200,
+    threshold: float = 0.90,
+) -> list[str]:
+    """Detect text columns whose sampled values are valid ISO dates."""
+
+    result = await db.execute(
+        select(Dataset).where(Dataset.id == dataset_id)
+    )
+    dataset = result.scalar_one_or_none()
+
+    if dataset is None:
+        return []
+
+    columns = await get_dataset_columns(db, dataset_id)
+
+    if columns is None:
+        return []
+
+    text_types = {
+        "text",
+        "character varying",
+        "character",
+        "varchar",
+    }
+
+    date_columns = []
+
+    def is_valid_date(value: str) -> bool:
+        value = value.strip()
+
+        if not value:
+            return False
+
+        try:
+            datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
+            return True
+        except ValueError:
+            try:
+                date.fromisoformat(value)
+                return True
+            except ValueError:
+                return False
+
+    def quote_identifier(identifier: str) -> str:
+        return '"' + identifier.replace('"', '""') + '"'
+
+    table = quote_identifier(dataset.table_name)
+
+    for column in columns:
+        if column["data_type"].lower() not in text_types:
+            continue
+
+        name = column["name"]
+        quoted_name = quote_identifier(name)
+
+        query = text(
+            f"""
+            SELECT {quoted_name}
+            FROM {table}
+            WHERE {quoted_name} IS NOT NULL
+              AND BTRIM({quoted_name}) <> ''
+            LIMIT :sample_size
+            """
+        )
+
+        result = await db.execute(
+            query,
+            {"sample_size": sample_size},
+        )
+
+        values = [
+            row[0]
+            for row in result.fetchall()
+            if isinstance(row[0], str)
+        ]
+
+        # Avoid classifying columns from an extremely small sample.
+        if len(values) < 5:
+            continue
+
+        valid_count = sum(
+            is_valid_date(value)
+            for value in values
+        )
+
+        if valid_count / len(values) >= threshold:
+            date_columns.append(name)
+
+    return date_columns
+
 
 
 async def get_dataset_column_operations(

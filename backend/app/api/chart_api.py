@@ -99,7 +99,12 @@ async def create_chart_endpoint(
             detail="Dataset not found"
         )
 
-    if chart_data.column or chart_data.group_by:
+    if (
+        chart_data.column
+        or chart_data.group_by
+        or chart_data.x_column
+        or chart_data.y_column
+    ):
 
         columns = await get_dataset_columns(
             db,
@@ -128,6 +133,13 @@ async def create_chart_endpoint(
                 status_code=400,
                 detail=f"Column '{chart_data.group_by}' does not exist"
             )
+
+        for axis_column in (chart_data.x_column, chart_data.y_column):
+            if axis_column and axis_column not in available_columns:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Column '{axis_column}' does not exist"
+                )
 
     if chart_data.operation:
         columns = await get_dataset_columns(
@@ -172,12 +184,19 @@ async def create_chart_endpoint(
                 )
 
     allowed_chart_types = {
-    "kpi",
-    "line",
-    "bar",
-    "pie",
-    "donut",
-    "table"
+        "kpi",
+        "line",
+        "area",
+        "bar",
+        "horizontal_bar",
+        "pie",
+        "donut",
+        "scatter",
+        "radar",
+        "histogram",
+        "boxplot",
+        "heatmap",
+        "table",
     }
 
     if chart_data.chart_type not in allowed_chart_types:
@@ -233,7 +252,9 @@ async def create_chart_endpoint(
         chart_data.chart_type,
         chart_data.group_by,
         chart_data.operation,
-        chart_data.column
+        chart_data.column,
+        chart_data.x_column,
+        chart_data.y_column,
     )
 
     return chart

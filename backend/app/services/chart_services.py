@@ -1,14 +1,17 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.chart_model import Chart
-from app.models.dashboard_model import Dashboard
-from app.services.analytics_services import calculate_kpi
-from app.services.analytics_services import aggregate_by_date, run_chart_query
 
 import pandas as pd
 
+from app.models.chart_model import Chart
+from app.models.dashboard_model import Dashboard
 from app.models.dataset_model import Dataset
+from app.services.analytics_services import calculate_kpi, aggregate_by_date, run_chart_query
+
+
+def _quote_identifier(identifier: str) -> str:
+    """Quote a PostgreSQL identifier safely."""
+    return '"' + identifier.replace('"', '""') + '"'
 
 
 async def create_chart(
@@ -21,7 +24,7 @@ async def create_chart(
     operation: str | None,
     column: str | None,
     x_column: str | None = None,
-    y_column: str | None = None
+    y_column: str | None = None,
 ):
     chart = Chart(
         name=name,
@@ -32,129 +35,76 @@ async def create_chart(
         operation=operation,
         column=column,
         x_column=x_column,
-        y_column=y_column
+        y_column=y_column,
     )
-
     db.add(chart)
-
     await db.flush()
     await db.refresh(chart)
     await db.commit()
-
     return chart
 
 
-async def get_dashboard_charts(
-    db: AsyncSession,
-    dashboard_id: int
-):
+async def get_dashboard_charts(db: AsyncSession, dashboard_id: int):
     result = await db.execute(
-        select(Chart).where(
-            Chart.dashboard_id == dashboard_id
-        )
+        select(Chart).where(Chart.dashboard_id == dashboard_id)
     )
-
     return result.scalars().all()
 
 
-async def get_dashboard_by_id(
-    db: AsyncSession,
-    dashboard_id: int,
-    project_id: int
-):
+async def get_dashboard_by_id(db: AsyncSession, dashboard_id: int, project_id: int):
     result = await db.execute(
         select(Dashboard).where(
             Dashboard.id == dashboard_id,
-            Dashboard.project_id == project_id
+            Dashboard.project_id == project_id,
         )
     )
-
     return result.scalar_one_or_none()
 
 
-async def get_chart_kpi(
-    db: AsyncSession,
-    chart_id: int,
-    dashboard_id: int
-):
+async def get_chart_kpi(db: AsyncSession, chart_id: int, dashboard_id: int):
     result = await db.execute(
         select(Chart).where(
             Chart.id == chart_id,
-            Chart.dashboard_id == dashboard_id
+            Chart.dashboard_id == dashboard_id,
         )
     )
-
     chart = result.scalar_one_or_none()
-
     if chart is None:
         return None
-
     if chart.operation is None:
-        raise ValueError(
-            "Chart operation is required"
-        )
-
+        raise ValueError("Chart operation is required")
     if chart.operation != "count" and chart.column is None:
-        raise ValueError(
-            "Chart column is required"
-        )
+        raise ValueError("Chart column is required")
 
-    value = await calculate_kpi(
-        db,
-        chart.dataset_id,
-        chart.operation,
-        chart.column
-    )
-
+    value = await calculate_kpi(db, chart.dataset_id, chart.operation, chart.column)
     return {
         "chart_id": chart.id,
         "name": chart.name,
         "chart_type": chart.chart_type,
         "operation": chart.operation,
         "column": chart.column,
-        "value": value
+        "value": value,
     }
 
 
-async def get_chart_line_data(
-    db: AsyncSession,
-    chart_id: int,
-    dashboard_id: int
-):
+async def get_chart_line_data(db: AsyncSession, chart_id: int, dashboard_id: int):
     result = await db.execute(
         select(Chart).where(
             Chart.id == chart_id,
-            Chart.dashboard_id == dashboard_id
+            Chart.dashboard_id == dashboard_id,
         )
     )
-
     chart = result.scalar_one_or_none()
-
     if chart is None:
         return None
-
     if chart.operation is None:
-        raise ValueError(
-            "Chart operation is required"
-        )
-
+        raise ValueError("Chart operation is required")
     if chart.column is None:
-        raise ValueError(
-            "Chart column is required"
-        )
-
+        raise ValueError("Chart column is required")
     if chart.group_by is None:
-        raise ValueError(
-            "Date column is required"
-        )
+        raise ValueError("Date column is required")
 
-    data = await aggregate_by_date(
-        db,
-        chart.dataset_id,
-        chart.group_by,
-        "month"
-    )
-
+    data = await aggregate_by_date(db, chart.dataset_id, chart.group_by, "month")
     return {
         "chart_id": chart.id,
         "name": chart.name,
@@ -162,50 +112,30 @@ async def get_chart_line_data(
         "operation": chart.operation,
         "column": chart.column,
         "date_column": chart.group_by,
-        "data": data
+        "data": data,
     }
 
 
-async def get_chart_bar_data(
-    db: AsyncSession,
-    chart_id: int,
-    dashboard_id: int
-):
+async def get_chart_bar_data(db: AsyncSession, chart_id: int, dashboard_id: int):
     result = await db.execute(
         select(Chart).where(
             Chart.id == chart_id,
-            Chart.dashboard_id == dashboard_id
+            Chart.dashboard_id == dashboard_id,
         )
     )
-
     chart = result.scalar_one_or_none()
-
     if chart is None:
         return None
-
     if chart.operation is None:
-        raise ValueError(
-            "Chart operation is required"
-        )
-
+        raise ValueError("Chart operation is required")
     if chart.group_by is None:
-        raise ValueError(
-            "Group by column is required"
-        )
-
+        raise ValueError("Group by column is required")
     if chart.operation != "count" and chart.column is None:
-        raise ValueError(
-            "Chart column is required"
-        )
+        raise ValueError("Chart column is required")
 
     data = await run_chart_query(
-        db,
-        chart.dataset_id,
-        chart.group_by,
-        chart.operation,
-        chart.column
+        db, chart.dataset_id, chart.group_by, chart.operation, chart.column
     )
-
     return {
         "chart_id": chart.id,
         "name": chart.name,
@@ -213,50 +143,30 @@ async def get_chart_bar_data(
         "operation": chart.operation,
         "column": chart.column,
         "group_by": chart.group_by,
-        "data": data
+        "data": data,
     }
 
 
-async def get_chart_pie_data(
-    db: AsyncSession,
-    chart_id: int,
-    dashboard_id: int
-):
+async def get_chart_pie_data(db: AsyncSession, chart_id: int, dashboard_id: int):
     result = await db.execute(
         select(Chart).where(
             Chart.id == chart_id,
-            Chart.dashboard_id == dashboard_id
+            Chart.dashboard_id == dashboard_id,
         )
     )
-
     chart = result.scalar_one_or_none()
-
     if chart is None:
         return None
-
     if chart.operation is None:
-        raise ValueError(
-            "Chart operation is required"
-        )
-
+        raise ValueError("Chart operation is required")
     if chart.group_by is None:
-        raise ValueError(
-            "Group by column is required"
-        )
-
+        raise ValueError("Group by column is required")
     if chart.operation != "count" and chart.column is None:
-        raise ValueError(
-            "Chart column is required"
-        )
+        raise ValueError("Chart column is required")
 
     data = await run_chart_query(
-        db,
-        chart.dataset_id,
-        chart.group_by,
-        chart.operation,
-        chart.column
+        db, chart.dataset_id, chart.group_by, chart.operation, chart.column
     )
-
     return {
         "chart_id": chart.id,
         "name": chart.name,
@@ -264,61 +174,80 @@ async def get_chart_pie_data(
         "operation": chart.operation,
         "column": chart.column,
         "group_by": chart.group_by,
-        "data": data
+        "data": data,
     }
 
 
-async def get_chart_table_data(
-    db: AsyncSession,
-    chart_id: int,
-    dashboard_id: int
-):
+async def get_chart_table_data(db: AsyncSession, chart_id: int, dashboard_id: int):
     result = await db.execute(
         select(Chart).where(
             Chart.id == chart_id,
-            Chart.dashboard_id == dashboard_id
+            Chart.dashboard_id == dashboard_id,
         )
     )
-
     chart = result.scalar_one_or_none()
-
     if chart is None:
         return None
 
-    dataset = await db.execute(
-        select(Dataset).where(
-            Dataset.id == chart.dataset_id
-        )
+    dataset_result = await db.execute(
+        select(Dataset).where(Dataset.id == chart.dataset_id)
     )
-
-    dataset = dataset.scalar_one_or_none()
-
+    dataset = dataset_result.scalar_one_or_none()
     if dataset is None:
-        raise ValueError(
-            "Dataset not found"
-        )
+        raise ValueError("Dataset not found")
 
     try:
-        df = pd.read_csv(
-            dataset.file_path
-        )
-
-    except Exception as e:
-        raise ValueError(
-            f"Failed to read dataset: {str(e)}"
-        )
-
-    data = df.to_dict(
-        orient="records"
-    )
+        df = pd.read_csv(dataset.file_path)
+    except Exception as exc:
+        raise ValueError(f"Failed to read dataset: {exc}") from exc
 
     return {
         "chart_id": chart.id,
         "name": chart.name,
         "chart_type": chart.chart_type,
         "columns": list(df.columns),
-        "data": data
+        "data": df.to_dict(orient="records"),
     }
+
+
+async def _get_raw_numeric_values(
+    db: AsyncSession,
+    table_name: str,
+    column: str,
+) -> list[dict]:
+    query = text(
+        f"""
+        SELECT CAST({_quote_identifier(column)} AS DOUBLE PRECISION) AS value
+        FROM {_quote_identifier(table_name)}
+        WHERE {_quote_identifier(column)} IS NOT NULL
+        """
+    )
+    result = await db.execute(query)
+    return [
+        {"value": row["value"]}
+        for row in result.mappings().all()
+        if row["value"] is not None
+    ]
+
+
+async def _get_numeric_pairs(
+    db: AsyncSession,
+    table_name: str,
+    x_column: str,
+    y_column: str,
+) -> list[dict]:
+    x = _quote_identifier(x_column)
+    y = _quote_identifier(y_column)
+    query = text(
+        f"""
+        SELECT CAST({x} AS DOUBLE PRECISION) AS {x},
+               CAST({y} AS DOUBLE PRECISION) AS {y}
+        FROM {_quote_identifier(table_name)}
+        WHERE {x} IS NOT NULL AND {y} IS NOT NULL
+        """
+    )
+    result = await db.execute(query)
+    return [dict(row) for row in result.mappings().all()]
 
 
 async def get_chart_data(
@@ -332,59 +261,37 @@ async def get_chart_data(
     operation: str | None,
     column: str | None,
     x_column: str | None = None,
-    y_column: str | None = None
+    y_column: str | None = None,
 ):
     result = await db.execute(
         select(Chart).where(
             Chart.id == chart_id,
-            Chart.dashboard_id == dashboard_id
+            Chart.dashboard_id == dashboard_id,
         )
     )
-
     chart = result.scalar_one_or_none()
-
     if chart is None:
         return None
 
-    if chart_type == "scatter":
-
-        if (
-            x_column is None
-            or y_column is None
-        ):
-            raise ValueError(
-                "Scatter chart requires x_column and y_column"
-            )
-
-        from sqlalchemy import text
-
-        query = text(
-            f"""
-            SELECT
-                "{x_column}" AS "{x_column}",
-                "{y_column}" AS "{y_column}"
-            FROM "{table_name}"
-            WHERE
-                "{x_column}" IS NOT NULL
-                AND "{y_column}" IS NOT NULL
-            """
-        )
-
-        result = await db.execute(query)
-
-        data = [
-            dict(row)
-            for row in result.mappings().all()
-        ]
-
+    if chart_type in {"histogram", "boxplot"}:
+        if not column:
+            raise ValueError(f"{chart_type} requires a numeric column")
+        data = await _get_raw_numeric_values(db, table_name, column)
+    elif chart_type in {"scatter", "heatmap"}:
+        if not x_column or not y_column:
+            raise ValueError(f"{chart_type} requires x_column and y_column")
+        data = await _get_numeric_pairs(db, table_name, x_column, y_column)
     else:
-
+        if not group_by:
+            raise ValueError(f"{chart_type} requires a group_by column")
+        if not operation:
+            raise ValueError(f"{chart_type} requires an operation")
         data = await run_chart_query(
             db=db,
             dataset_id=dataset_id,
             group_by=group_by,
             operation=operation,
-            column=column
+            column=column,
         )
 
     return {
@@ -398,27 +305,17 @@ async def get_chart_data(
             "operation": operation,
             "column": column,
             "x_column": x_column,
-            "y_column": y_column
+            "y_column": y_column,
         },
-        "data": data
+        "data": data,
     }
 
-async def delete_dashboard_charts(
-    db: AsyncSession,
-    dashboard_id: int
-):
+
+async def delete_dashboard_charts(db: AsyncSession, dashboard_id: int):
     result = await db.execute(
-        select(Chart).where(
-            Chart.dashboard_id == dashboard_id
-        )
+        select(Chart).where(Chart.dashboard_id == dashboard_id)
     )
-
     charts = result.scalars().all()
-
     for chart in charts:
         await db.delete(chart)
-
     await db.flush()
-
-
-    
