@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import authApi from '../api/auth_api';
 import { getProjectDatasets } from '../api/project_data_api';
@@ -16,6 +16,7 @@ function Datasets() {
   const { workspaceId, projectId } = useParams();
 
   const fileInputRef = useRef(null);
+  const navigate = useNavigate();
 
   // ==========================================================
   // STATE: FILE UPLOAD
@@ -646,7 +647,6 @@ function Datasets() {
                       >
                         Preview
                       </button>
-
                       <button
                         type='button'
                         onClick={() => handleProfile(dataset)}
@@ -654,6 +654,18 @@ function Datasets() {
                         className='rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50'
                       >
                         Profile
+                      </button>
+
+                      <button
+                        type='button'
+                        onClick={() =>
+                          navigate(
+                            `/workspaces/${workspaceId}/projects/${projectId}/datasets/${dataset.id}/dashboard`,
+                          )
+                        }
+                        className='rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700'
+                      >
+                        Analyze Dataset
                       </button>
 
                       <span className='rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700'>

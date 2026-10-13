@@ -10,6 +10,7 @@ import Profile from './pages/profile';
 import Workspace from './pages/Workspace';
 import ProjectDashboard from './pages/ProjectDashboard';
 import Datasets from './pages/Datasets';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   return (
@@ -41,6 +42,11 @@ function App() {
           <Route
             path='/workspaces/:workspaceId/projects/:projectId/datasets'
             element={<Datasets />}
+          />
+
+          <Route
+            path='/workspaces/:workspaceId/projects/:projectId/datasets/:datasetId/dashboard'
+            element={<ProjectDashboard />}
           />
         </Route>
       </Routes>

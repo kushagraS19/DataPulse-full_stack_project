@@ -5,8 +5,7 @@ import { getProject } from '../api/project_api';
 import Dashboard from './Dashboard';
 
 function ProjectDashboard() {
-  const { workspaceId, projectId } = useParams();
-
+  const { workspaceId, projectId, datasetId } = useParams();
   const navigate = useNavigate();
 
   const [project, setProject] = useState(null);
@@ -56,7 +55,6 @@ function ProjectDashboard() {
       <div className='flex min-h-screen items-center justify-center bg-stone-50'>
         <div className='text-center'>
           <div className='mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-4 border-stone-200 border-t-slate-700' />
-
           <p className='text-sm text-slate-500'>Loading project...</p>
         </div>
       </div>
@@ -101,13 +99,16 @@ function ProjectDashboard() {
             <span className='transition-transform duration-300 group-hover:-translate-x-0.5'>
               ←
             </span>
-
             <span>Datasets</span>
           </button>
         </div>
       </div>
 
-      <Dashboard project={project} workspace={workspace} />
+      <Dashboard
+        project={project}
+        workspace={workspace}
+        datasetId={datasetId ? Number(datasetId) : null}
+      />
     </div>
   );
 }

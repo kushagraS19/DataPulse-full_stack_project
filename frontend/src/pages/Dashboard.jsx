@@ -11,7 +11,7 @@ import {
 import ChartCard from '../components/dashboard/ChartCard';
 import ChartRenderer from '../components/dashboard/ChartRenderer';
 
-function Dashboard({ project, workspace }) {
+function Dashboard({ project, workspace, datasetId }) {
   const navigate = useNavigate();
 
   const [dashboard, setDashboard] = useState(null);
@@ -55,14 +55,13 @@ function Dashboard({ project, workspace }) {
       loadedProjectRef.current = null;
     }
 
-    const projectId = project.id;
-    const workspaceId = workspace.id;
-    const loadKey = `${projectId}:${workspaceId}`;
+    const projectId = Number(project.id);
+    const workspaceId = Number(workspace.id);
+    const requestedDatasetId = datasetId == null ? null : Number(datasetId);
+    const loadKey = `${projectId}:${workspaceId}:${requestedDatasetId}`;
 
-    // React StrictMode can run effects twice in development.
-    // Dashboard generation recreates chart records, so allowing two
-    // generations at the same time can leave the first response holding
-    // chart IDs that the second generation has already replaced.
+    // A dashboard is selected by the dataset in the URL, never by array order.
+    // Prevent duplicate generation for the same dataset during React StrictMode.
     if (loadedProjectRef.current === loadKey) {
       return;
     }
@@ -76,28 +75,54 @@ function Dashboard({ project, workspace }) {
         setError(null);
         setDashboard(null);
         setChartData({});
+        setExpandedChart(null);
 
-        const dashboards = await getProjectDashboards(projectId, workspaceId);
-
-        if (!dashboards || dashboards.length === 0) {
-          throw new Error('No dashboard found for this project');
+        if (
+          requestedDatasetId == null ||
+          !Number.isInteger(requestedDatasetId) ||
+          requestedDatasetId <= 0
+        ) {
+          throw new Error('Select a dataset to view its dashboard.');
         }
 
         const datasets = await getProjectDatasets(projectId, workspaceId);
 
         if (!datasets || datasets.length === 0) {
-          throw new Error('No dataset found for this project');
+          throw new Error('No datasets found for this project');
         }
 
-        const selectedDashboard = dashboards[0];
-        const selectedDataset = datasets[0];
+        const selectedDataset = datasets.find(
+          (dataset) => Number(dataset.id) === requestedDatasetId,
+        );
 
-        const dashboardId = selectedDashboard.id;
-        const datasetId = selectedDataset.id;
+        if (!selectedDataset) {
+          throw new Error(
+            `Dataset ${requestedDatasetId} was not found in this project`,
+          );
+        }
+
+        const dashboards = await getProjectDashboards(projectId, workspaceId);
+
+        if (!dashboards || dashboards.length === 0) {
+          throw new Error('No dashboards found for this project');
+        }
+
+        const selectedDashboard = dashboards.find(
+          (dashboardItem) =>
+            Number(dashboardItem.dataset_id) === requestedDatasetId,
+        );
+
+        if (!selectedDashboard) {
+          throw new Error(
+            `No dashboard found for dataset ${requestedDatasetId}`,
+          );
+        }
+
+        const dashboardId = Number(selectedDashboard.id);
 
         const dashboardResponse = await generateDashboard({
           dashboardId,
-          datasetId,
+          datasetId: requestedDatasetId,
           projectId,
           workspaceId,
         });
@@ -106,14 +131,12 @@ function Dashboard({ project, workspace }) {
           return;
         }
 
-        // KPIs are calculated by the dashboard generator. They are not
-        // related to individual chart IDs.
+        // KPIs are calculated by the dashboard generator, not individual charts.
         setDashboard(dashboardResponse);
 
         const charts = dashboardResponse.charts || [];
 
-        // One broken/stale chart must not make the entire dashboard fail.
-        // This is especially important while charts are being regenerated.
+        // A broken chart should not prevent the remaining charts from loading.
         const chartResponses = await Promise.all(
           charts.map(async (chart) => {
             try {
@@ -130,7 +153,6 @@ function Dashboard({ project, workspace }) {
               };
             } catch (chartError) {
               console.warn(`Failed to load chart ${chart.id}:`, chartError);
-
               return null;
             }
           }),
@@ -169,7 +191,7 @@ function Dashboard({ project, workspace }) {
     };
 
     loadDashboard();
-  }, [project?.id, workspace?.id, retryToken]);
+  }, [project?.id, workspace?.id, datasetId, retryToken]);
 
   if (loading) {
     return (
