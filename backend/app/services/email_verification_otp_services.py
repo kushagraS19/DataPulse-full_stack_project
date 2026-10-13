@@ -1,3 +1,4 @@
+
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -14,158 +15,182 @@ MAX_OTP_ATTEMPTS = 5
 OTP_REQUEST_COOLDOWN_SECONDS = 60
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def generate_email_verification_otp() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
 async def create_email_verification_otp(
     db: AsyncSession,
-    user: User
-):
-    # Don't generate another OTP if email is already verified
-    if user.email_verified:
-        raise ValueError("Email is already verified")
-
-    now = datetime.now(timezone.utc)
-
-    # Find the latest OTP
-    result = await db.execute(
-        select(EmailVerificationOTP)
-        .where(
-            EmailVerificationOTP.user_id == user.id
+    user: User,
+) -> str:
+    try:
+        # Serialize OTP creation requests for this user.
+        result = await db.execute(
+            select(User)
+            .where(User.id == user.id)
+            .with_for_update()
         )
-        .order_by(
-            EmailVerificationOTP.created_at.desc()
+        locked_user = result.scalar_one_or_none()
+
+        if locked_user is None:
+            raise ValueError("User not found")
+
+        if locked_user.email_verified:
+            raise ValueError("Email is already verified")
+
+        now = _utc_now()
+
+        result = await db.execute(
+            select(EmailVerificationOTP)
+            .where(EmailVerificationOTP.user_id == locked_user.id)
+            .order_by(EmailVerificationOTP.created_at.desc())
+            .limit(1)
         )
-        .limit(1)
-    )
+        latest_otp = result.scalar_one_or_none()
 
-    latest_otp = result.scalar_one_or_none()
+        if latest_otp is not None:
+            created_at = _normalize_datetime(latest_otp.created_at)
+            elapsed = (now - created_at).total_seconds()
 
-    # Rate limit OTP requests
-    if latest_otp:
-        seconds_since_last_request = (
-            now - latest_otp.created_at
-        ).total_seconds()
+            if elapsed < OTP_REQUEST_COOLDOWN_SECONDS:
+                remaining = max(
+                    1,
+                    int(OTP_REQUEST_COOLDOWN_SECONDS - elapsed) + 1,
+                )
+                raise ValueError(
+                    f"Please wait {remaining} seconds "
+                    "before requesting another OTP"
+                )
 
-        if seconds_since_last_request < OTP_REQUEST_COOLDOWN_SECONDS:
-            remaining = int(
-                OTP_REQUEST_COOLDOWN_SECONDS
-                - seconds_since_last_request
+        # Invalidate previous active OTPs.
+        await db.execute(
+            update(EmailVerificationOTP)
+            .where(
+                EmailVerificationOTP.user_id == locked_user.id,
+                EmailVerificationOTP.used.is_(False),
             )
-
-            raise ValueError(
-                f"Please wait {remaining} seconds before requesting another OTP"
-            )
-
-    # Invalidate previous unused OTPs
-    await db.execute(
-        update(EmailVerificationOTP)
-        .where(
-            EmailVerificationOTP.user_id == user.id,
-            EmailVerificationOTP.used == False
+            .values(used=True)
         )
-        .values(used=True)
-    )
 
-    # Generate new OTP
-    otp = generate_email_verification_otp()
+        otp = generate_email_verification_otp()
+        otp_hash = create_otp_digest(
+            otp,
+            locked_user.id,
+            "email-verification",
+        )
 
-    # Create secure digest
-    otp_hash = create_otp_digest(
-        otp,
-        user.id,
-        "email-verification"
-    )
+        verification_otp = EmailVerificationOTP(
+            user_id=locked_user.id,
+            otp_hash=otp_hash,
+            expires_at=now + timedelta(minutes=OTP_EXPIRY_MINUTES),
+            attempts=0,
+            used=False,
+        )
 
-    # Create OTP record
-    verification_otp = EmailVerificationOTP(
-        user_id=user.id,
-        otp_hash=otp_hash,
-        expires_at=now + timedelta(
-            minutes=OTP_EXPIRY_MINUTES
-        ),
-        attempts=0,
-        used=False
-    )
+        db.add(verification_otp)
+        await db.commit()
 
-    db.add(verification_otp)
+        return otp
 
-    await db.commit()
-    await db.refresh(verification_otp)
-
-    return otp
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def verify_email_verification_otp(
     db: AsyncSession,
     user: User,
-    otp: str
-):
-    now = datetime.now(timezone.utc)
-
-    # Find latest unused OTP
-    result = await db.execute(
-        select(EmailVerificationOTP)
-        .where(
-            EmailVerificationOTP.user_id == user.id,
-            EmailVerificationOTP.used == False
+    otp: str,
+) -> User:
+    try:
+        # Lock the user row to serialize verification and OTP creation.
+        user_result = await db.execute(
+            select(User)
+            .where(User.id == user.id)
+            .with_for_update()
         )
-        .order_by(
-            EmailVerificationOTP.created_at.desc()
+        locked_user = user_result.scalar_one_or_none()
+
+        if locked_user is None:
+            raise ValueError("User not found")
+
+        if locked_user.email_verified:
+            raise ValueError("Email is already verified")
+
+        result = await db.execute(
+            select(EmailVerificationOTP)
+            .where(
+                EmailVerificationOTP.user_id == locked_user.id,
+                EmailVerificationOTP.used.is_(False),
+            )
+            .order_by(EmailVerificationOTP.created_at.desc())
+            .limit(1)
+            .with_for_update()
         )
-        .with_for_update()
-    )
+        verification_otp = result.scalar_one_or_none()
 
-    verification_otp = result.scalars().first()
+        if verification_otp is None:
+            raise ValueError("No active verification OTP found")
 
-    if verification_otp is None:
-        raise ValueError(
-            "No active verification OTP found"
+        now = _utc_now()
+        expires_at = _normalize_datetime(verification_otp.expires_at)
+
+        if expires_at <= now:
+            verification_otp.used = True
+            await db.commit()
+            raise ValueError("OTP has expired")
+
+        if verification_otp.attempts >= MAX_OTP_ATTEMPTS:
+            verification_otp.used = True
+            await db.commit()
+            raise ValueError("Maximum OTP attempts exceeded")
+
+        is_valid = verify_otp(
+            otp,
+            locked_user.id,
+            verification_otp.otp_hash,
+            "email-verification",
         )
 
-    # Check expiry
-    if verification_otp.expires_at <= now:
+        if not is_valid:
+            verification_otp.attempts += 1
+            attempts_exceeded = (
+                verification_otp.attempts >= MAX_OTP_ATTEMPTS
+            )
+
+            if attempts_exceeded:
+                verification_otp.used = True
+
+            await db.commit()
+
+            if attempts_exceeded:
+                raise ValueError("Maximum OTP attempts exceeded")
+
+            raise ValueError("Invalid OTP")
+
         verification_otp.used = True
+        locked_user.email_verified = True
 
         await db.commit()
+        await db.refresh(locked_user)
 
-        raise ValueError(
-            "OTP has expired"
-        )
+        return locked_user
 
-    # Check attempt limit
-    if verification_otp.attempts >= MAX_OTP_ATTEMPTS:
-        verification_otp.used = True
+    except ValueError:
+        if db.in_transaction():
+            await db.rollback()
+        raise
 
-        await db.commit()
-
-        raise ValueError(
-            "Maximum OTP attempts exceeded"
-        )
-
-    # Verify OTP
-    is_valid = verify_otp(
-        otp,
-        user.id,
-        verification_otp.otp_hash,
-        "email-verification"
-    )
-
-    if not is_valid:
-        verification_otp.attempts += 1
-
-        await db.commit()
-
-        raise ValueError(
-            "Invalid OTP"
-        )
-
-    # OTP is valid
-    verification_otp.used = True
-    user.email_verified = True
-
-    await db.commit()
-    await db.refresh(user)
-
-    return user
+    except Exception:
+        await db.rollback()
+        raise

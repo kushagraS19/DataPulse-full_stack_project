@@ -16,6 +16,7 @@ from app.models.user_model import User
 from app.services.insight_services import (
     generate_dataset_insights,
 )
+from app.services.workspace_services import get_workspace_by_id
 
 
 # ============================================================
@@ -44,6 +45,22 @@ async def get_dataset_insights(
         get_current_user
     ),
 ):
+    # --------------------------------------------------------
+    # Verify workspace ownership
+    # --------------------------------------------------------
+
+    workspace = await get_workspace_by_id(
+        db,
+        workspace_id,
+        current_user.id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found",
+        )
+
     # --------------------------------------------------------
     # Verify project
     # --------------------------------------------------------
@@ -98,14 +115,11 @@ async def get_dataset_insights(
             dataset.file_path
         )
 
-    except Exception as e:
-
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Failed to read dataset: {str(e)}"
-            )
-        )
+            detail="Failed to read dataset",
+        ) from None
 
     # --------------------------------------------------------
     # Generate insights
@@ -124,14 +138,11 @@ async def get_dataset_insights(
             detail=str(e)
         )
 
-    except Exception as e:
-
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Failed to generate insights: {str(e)}"
-            )
-        )
+            detail="Failed to generate insights",
+        ) from None
 
     return {
         "dataset_id": dataset.id,

@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import authApi from '../api/auth_api';
+import { useAuth } from '../context/authContext';
 
 function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { workspaceId, projectId } = useParams();
+  const { user } = useAuth();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -31,7 +33,6 @@ function Sidebar() {
       }
 
       localStorage.removeItem('access_token');
-
       navigate('/login', { replace: true });
     } finally {
       setLoggingOut(false);
@@ -72,7 +73,6 @@ function Sidebar() {
             <p className='text-base font-bold tracking-tight text-slate-950'>
               DataPulse
             </p>
-
             <p className='text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400'>
               Analytics
             </p>
@@ -138,7 +138,7 @@ function Sidebar() {
             Account
           </p>
 
-          <nav>
+          <nav className='space-y-1'>
             <NavLink
               to='/profile'
               className={navItemClass}
@@ -147,6 +147,18 @@ function Sidebar() {
               <span className='text-base'>◎</span>
               <span>Profile</span>
             </NavLink>
+
+            {/* Admin Dashboard: visible only to admins */}
+            {user?.role === 'admin' && (
+              <NavLink
+                to='/admin'
+                className={navItemClass}
+                onClick={closeMobile}
+              >
+                <span className='text-base'>⚙</span>
+                <span>Admin Dashboard</span>
+              </NavLink>
+            )}
           </nav>
         </div>
       </div>

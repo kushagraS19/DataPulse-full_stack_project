@@ -11,6 +11,7 @@ import Profile from './pages/profile';
 import Workspace from './pages/Workspace';
 import ProjectDashboard from './pages/ProjectDashboard';
 import Datasets from './pages/Datasets';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
@@ -48,6 +49,15 @@ function App() {
           <Route
             path='/workspaces/:workspaceId/projects/:projectId/datasets/:datasetId/dashboard'
             element={<ProjectDashboard />}
+          />
+
+          <Route
+            path='/admin'
+            element={
+              <ProtectedRoute adminOnly>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
           />
         </Route>
       </Routes>

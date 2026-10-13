@@ -1,0 +1,23 @@
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Generated upload data
+backend/uploads/raw/*
+backend/uploads/processed/*
+
+# Keep upload directories
+!backend/uploads/raw/.gitkeep
+!backend/uploads/processed/.gitkeep

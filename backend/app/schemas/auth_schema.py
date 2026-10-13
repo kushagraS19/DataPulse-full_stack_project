@@ -5,13 +5,12 @@ class LoginRequest(BaseModel):
     password : str
 
 class UserResponse(BaseModel):
-    id : int
-    name : str
-    email : EmailStr
+    id: int
+    name: str
+    email: EmailStr
+    role: str
 
-    model_config = {
-        "from_attributes" : True
-    }
+    model_config = {"from_attributes": True}
 
 class PasswordChangeVerifyRequest(BaseModel):
     otp: str = Field(min_length=6, max_length=6)

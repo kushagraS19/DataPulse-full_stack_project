@@ -1,6 +1,12 @@
+
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import (
+    DateTime,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -9,6 +15,14 @@ from app.models.base import Base
 class LoginAttempt(Base):
     __tablename__ = "login_attempts"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "email",
+            "ip_address",
+            name="uq_login_attempt_email_ip",
+        ),
+    )
+
     id: Mapped[int] = mapped_column(
         primary_key=True
     )
@@ -16,28 +30,28 @@ class LoginAttempt(Base):
     email: Mapped[str] = mapped_column(
         String(255),
         index=True,
-        nullable=False
+        nullable=False,
     )
 
     ip_address: Mapped[str] = mapped_column(
         String(45),
-        nullable=False
+        nullable=False,
     )
 
     failed_attempts: Mapped[int] = mapped_column(
         Integer,
         default=0,
-        nullable=False
+        nullable=False,
     )
 
     locked_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
-        nullable=True
+        nullable=True,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
